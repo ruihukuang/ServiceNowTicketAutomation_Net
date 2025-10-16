@@ -29,6 +29,14 @@ namespace API.Controllers
         [HttpPost("process")]
         public async Task<IActionResult> ProcessData()
         {
+            // Check if the process has already been run
+            bool alreadyProcessed = await context.Activities.AnyAsync(a => a.NumberTeam_Fixed_Issue > 0 || a.NumberTeam_Included_in_Ticket > 0);
+
+            if (alreadyProcessed)
+            {
+                return Ok("Data processing has already been completed.");
+            }
+
             // Define tasks for parallel execution
             var task1 = Task.Run(async () =>
             {
