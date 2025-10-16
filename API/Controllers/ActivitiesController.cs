@@ -23,50 +23,58 @@ namespace API.Controllers
 
             if (activity == null) return NotFound();
 
-        return activity;
+            return activity;
+        }
 
-    }
-    
-    [HttpPost("process")]
-    public async Task<IActionResult> ProcessData()
-    {
-        // Extract: Get all records where Team_Fixed_Issue is not null
-        var records_teamfix = await context.Activities
-            .Where(r => r.Team_Fixed_Issue != null)
-            .ToListAsync();
-
-            // Transform and Load: Update NumberTeam_Fixed_Issue with the number of teams
-            foreach (var record in records_teamfix)
+        [HttpPost("process")]
+        public async Task<IActionResult> ProcessData()
+        {
+            // Define tasks for parallel execution
+            var task1 = Task.Run(async () =>
             {
-                // Calculate the number of teams based on the number of commas
-                int numberOfTeams = record.Team_Fixed_Issue.Contains(',')
-                    ? record.Team_Fixed_Issue.Split(',').Length
-                    : 1;
-
-                record.NumberTeam_Fixed_Issue = numberOfTeams;
-            }
-        
                 // Extract: Get all records where Team_Fixed_Issue is not null
-        var records_teamticket = await context.Activities
-            .Where(r => r.Team_Included_in_Ticket != null)
-            .ToListAsync();
+                var records_teamfix = await context.Activities
+                    .Where(r => r.Team_Fixed_Issue != null)
+                    .ToListAsync();
 
-            // Transform and Load: Update NumberTeam_Fixed_Issue with the number of teams
-            foreach (var record in records_teamticket)
+                // Transform and Load: Update NumberTeam_Fixed_Issue with the number of teams
+                foreach (var record in records_teamfix)
+                {
+                    // Calculate the number of teams based on the number of commas
+                    int numberOfTeams = record.Team_Fixed_Issue.Contains(',')
+                        ? record.Team_Fixed_Issue.Split(',').Length
+                        : 1;
+
+                    record.NumberTeam_Fixed_Issue = numberOfTeams;
+                }
+            });
+
+            var task2 = Task.Run(async () =>
             {
-                // Calculate the number of teams based on the number of commas
-                int numberOfTeams = record.Team_Included_in_Ticket.Contains(',') 
-                    ? record.Team_Included_in_Ticket.Split(',').Length 
-                    : 1;
+                // Extract: Get all records where Team_Included_in_Ticket is not null
+                var records_teamticket = await context.Activities
+                    .Where(r => r.Team_Included_in_Ticket != null)
+                    .ToListAsync();
 
-                record.NumberTeam_Included_in_Ticket = numberOfTeams;
-            }
+                // Transform and Load: Update NumberTeam_Included_in_Ticket with the number of teams
+                foreach (var record in records_teamticket)
+                {
+                    // Calculate the number of teams based on the number of commas
+                    int numberOfTeams = record.Team_Included_in_Ticket.Contains(',')
+                        ? record.Team_Included_in_Ticket.Split(',').Length
+                        : 1;
 
+                    record.NumberTeam_Included_in_Ticket = numberOfTeams;
+                }
+            });
 
-        // Save changes to the database
-        await context.SaveChangesAsync();
+            // Wait for both tasks to complete
+            await Task.WhenAll(task1, task2);
 
-        return Ok("Data processing completed.");
+            // Save changes to the database
+            await context.SaveChangesAsync();
+
+            return Ok("Data processing completed.");
         }
     }
 }
