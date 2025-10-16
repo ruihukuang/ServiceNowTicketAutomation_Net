@@ -34,26 +34,30 @@ namespace API.Controllers
             bool runTask2 = await context.Activities.AnyAsync(a => a.NumberTeam_Fixed_Issue > 0 && a.NumberTeam_Included_in_Ticket == 0);
             bool runBothTasks = await context.Activities.AnyAsync(a => a.NumberTeam_Fixed_Issue == 0 && a.NumberTeam_Included_in_Ticket == 0);
 
+            var tasks = new List<Task>();
+
             if (runBothTasks)
             {
-                // Run both tasks
-                await RunTask1();
-                await RunTask2();
+                // Run both tasks concurrently
+                tasks.Add(RunTask1());
+                tasks.Add(RunTask2());
             }
             else if (runTask1)
             {
                 // Run task related to NumberTeam_Fixed_Issue
-                await RunTask1();
+                tasks.Add(RunTask1());
             }
             else if (runTask2)
             {
                 // Run task related to NumberTeam_Included_in_Ticket
-                await RunTask2();
+                tasks.Add(RunTask2());
             }
-            else
-            {
-                return Ok("No processing needed.");
-            }
+
+            // Run the new task to check and update Is_AssignedGroup_Fixed_Issue concurrently
+            tasks.Add(CheckAndUpdateAssignedGroup());
+
+            // Wait for all tasks to complete
+            await Task.WhenAll(tasks);
 
             // Save changes to the database
             await context.SaveChangesAsync();
@@ -94,6 +98,24 @@ namespace API.Controllers
                     : 1;
 
                 record.NumberTeam_Included_in_Ticket = numberOfTeams;
+            }
+        }
+
+        private async Task CheckAndUpdateAssignedGroup()
+        {
+            // Extract: Get all records where Is_AssignedGroup_Fixed_Issue is null
+            var records_assignedGroup = await context.Activities
+                .Where(r => r.Is_AssignedGroup_Fixed_Issue == null)
+                .ToListAsync();
+
+            // Check Team_Fixed_Issue against AssignedGroup and update if necessary
+            foreach (var record in records_assignedGroup)
+            {
+                if (record.Team_Fixed_Issue != record.AssignedGroup)
+                {
+                    // Set Is_AssignedGroup_Fixed_Issue to "y" if they do not match
+                    record.Is_AssignedGroup_Fixed_Issue = "y";
+                }
             }
         }
     }
