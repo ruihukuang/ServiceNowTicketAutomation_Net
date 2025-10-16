@@ -25,7 +25,7 @@ namespace Domain
 
         public string? Is_AissignedGroup_ResponsibleTeam { get; set; }
 
-        public string? Is_AssignedGroup_Fixed_Issue { get; set; }
+        public string?  Did_AssignedGroup_Fix_Issue { get; set; }
 
         public string? Summary_Issue { get; set; }
 
