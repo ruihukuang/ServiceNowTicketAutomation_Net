@@ -54,7 +54,7 @@ namespace API.Controllers
                 tasks.Add(RunTask2());
             }
 
-            // Run the new task to check and update Is_AssignedGroup_Fixed_Issue concurrently
+            // Run the new task to check and update Did_AssignedGroup_Fix_Issue  concurrently
             tasks.Add(CheckAndUpdateAssignedGroup());
 
             // Wait for all tasks to complete
@@ -104,9 +104,9 @@ namespace API.Controllers
 
         private async Task CheckAndUpdateAssignedGroup()
         {
-            // Extract: Get all records where Is_AssignedGroup_Fixed_Issue is null
+            // Extract: Get all records where Did_AssignedGroup_Fix_Issue  is null
             var records_assignedGroup = await context.Activities
-                .Where(r => r.Is_AssignedGroup_Fixed_Issue == null)
+                .Where(r => r.Did_AssignedGroup_Fix_Issue  == null)
                 .ToListAsync();
 
             // Check if AssignedGroup is included in Team_Fixed_Issue and update if necessary
