@@ -23,32 +23,50 @@ namespace API.Controllers
 
             if (activity == null) return NotFound();
 
-            return activity;
-        }
+        return activity;
 
-        [HttpPost("process")]
-        public async Task<IActionResult> ProcessData()
-        {
-            // Extract: Get all records where Team_Fixed_Issue is not null
-            var records = await context.Activities
-                .Where(r => r.Team_Fixed_Issue != null)
-                .ToListAsync();
+    }
+    
+    [HttpPost("process")]
+    public async Task<IActionResult> ProcessData()
+    {
+        // Extract: Get all records where Team_Fixed_Issue is not null
+        var records_teamfix = await context.Activities
+            .Where(r => r.Team_Fixed_Issue != null)
+            .ToListAsync();
 
             // Transform and Load: Update NumberTeam_Fixed_Issue with the number of teams
-            foreach (var record in records)
+            foreach (var record in records_teamfix)
             {
                 // Calculate the number of teams based on the number of commas
-                int numberOfTeams = record.Team_Fixed_Issue.Contains(',') 
-                    ? record.Team_Fixed_Issue.Split(',').Length 
+                int numberOfTeams = record.Team_Fixed_Issue.Contains(',')
+                    ? record.Team_Fixed_Issue.Split(',').Length
                     : 1;
 
                 record.NumberTeam_Fixed_Issue = numberOfTeams;
             }
+        
+                // Extract: Get all records where Team_Fixed_Issue is not null
+        var records_teamticket = await context.Activities
+            .Where(r => r.Team_Included_in_Ticket != null)
+            .ToListAsync();
 
-            // Save changes to the database
-            await context.SaveChangesAsync();
+            // Transform and Load: Update NumberTeam_Fixed_Issue with the number of teams
+            foreach (var record in records_teamticket)
+            {
+                // Calculate the number of teams based on the number of commas
+                int numberOfTeams = record.Team_Included_in_Ticket.Contains(',') 
+                    ? record.Team_Included_in_Ticket.Split(',').Length 
+                    : 1;
 
-            return Ok("Data processing completed.");
+                record.NumberTeam_Included_in_Ticket = numberOfTeams;
+            }
+
+
+        // Save changes to the database
+        await context.SaveChangesAsync();
+
+        return Ok("Data processing completed.");
         }
     }
 }
