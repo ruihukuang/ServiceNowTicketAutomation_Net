@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+//This line adds support for controllers in your application. It enables the discovery of all controllers with attribute-based routing.
 builder.Services.AddDbContext<AppDbContext>(Opt =>
 {
     Opt.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
