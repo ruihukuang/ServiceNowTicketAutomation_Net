@@ -123,13 +123,13 @@ namespace API.Controllers
                     // Check if AssignedGroup is a part of Team_Fixed_Issue
                     if (teamListUpper.Contains(assignedGroupUpper))
                     {
-                        // Set Is_AssignedGroup_Fixed_Issue to "y" if AssignedGroup is included in Team_Fixed_Issue
-                        record.Is_AssignedGroup_Fixed_Issue = "y";
+                        // Set  Did_AssignedGroup_Fix_Issue to "y" if AssignedGroup is included in Team_Fixed_Issue
+                        record.Did_AssignedGroup_Fix_Issue = "Y";
                     }
                     else
                     {
-                        // Set Is_AssignedGroup_Fixed_Issue to "n" if not included
-                        record.Is_AssignedGroup_Fixed_Issue = "n";
+                        // Set  Did_AssignedGroup_Fix_Issue to "n" if not included
+                        record.Did_AssignedGroup_Fix_Issue = "N";
                     }
                 }
             }
