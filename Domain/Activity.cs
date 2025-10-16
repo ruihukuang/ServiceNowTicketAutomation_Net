@@ -44,5 +44,18 @@ namespace Domain
         public string? Duplicate { get; set; }
 
         public string? Duplicate_AI { get; set; }
+
+        // New DateTime properties
+        public DateTime OpenDate { get; set; }
+        public DateTime UpdatedDate { get; set; }
+
+        // New string properties for date components
+        public string? OpenDate_Year { get; set; }
+        public string? OpenDate_Month { get; set; }
+        public string? OpenDate_Day { get; set; }
+
+        public string? UpdatedDate_Year { get; set; }
+        public string? UpdatedDate_Month { get; set; }
+        public string? UpdatedDate_Day { get; set; }
     }
 }
