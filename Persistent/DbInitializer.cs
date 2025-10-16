@@ -25,7 +25,7 @@ namespace Persistent
                     NumberTeam_Included_in_Ticket = 0,
                     NumberTeam_Fixed_Issue = 0,
                     Is_AissignedGroup_ResponsibleTeam = null,
-                    Is_AssignedGroup_Fixed_Issue = null,
+                    Did_AssignedGroup_Fix_Issue = null,
                     Summary_Issue = null,
                     Summary_Issue_AI = null,
                     System = null,
@@ -34,7 +34,15 @@ namespace Persistent
                     Issue_AI = null,
                     Root_Cause = null,
                     Duplicate = null,
-                    Duplicate_AI = null
+                    Duplicate_AI = null,
+                    OpenDate= "1/05/2025  10:24:34 AM",
+                    UpdatedDate= "13/05/2025  3:00:33 PM",
+                    OpenDate_Year= null,
+                    OpenDate_Month = null,
+                    OpenDate_Day = null,
+                    UpdatedDate_Year =null,
+                    UpdatedDate_Month=null,
+                    UpdatedDate_Day=null
                 }
             };
 
