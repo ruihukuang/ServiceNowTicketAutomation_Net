@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace API.Controllers
 {
@@ -108,13 +109,28 @@ namespace API.Controllers
                 .Where(r => r.Is_AssignedGroup_Fixed_Issue == null)
                 .ToListAsync();
 
-            // Check Team_Fixed_Issue against AssignedGroup and update if necessary
+            // Check if AssignedGroup is included in Team_Fixed_Issue and update if necessary
             foreach (var record in records_assignedGroup)
             {
-                if (record.Team_Fixed_Issue != record.AssignedGroup)
+                if (record.Team_Fixed_Issue != null && record.AssignedGroup != null)
                 {
-                    // Set Is_AssignedGroup_Fixed_Issue to "y" if they do not match
-                    record.Is_AssignedGroup_Fixed_Issue = "y";
+                    // Remove spaces and convert to uppercase
+                    var assignedGroupUpper = record.AssignedGroup.Replace(" ", "").ToUpper();
+                    var teamListUpper = record.Team_Fixed_Issue.Split(',')
+                        .Select(t => t.Replace(" ", "").ToUpper())
+                        .ToList();
+
+                    // Check if AssignedGroup is a part of Team_Fixed_Issue
+                    if (teamListUpper.Contains(assignedGroupUpper))
+                    {
+                        // Set Is_AssignedGroup_Fixed_Issue to "y" if AssignedGroup is included in Team_Fixed_Issue
+                        record.Is_AssignedGroup_Fixed_Issue = "y";
+                    }
+                    else
+                    {
+                        // Set Is_AssignedGroup_Fixed_Issue to "n" if not included
+                        record.Is_AssignedGroup_Fixed_Issue = "n";
+                    }
                 }
             }
         }
