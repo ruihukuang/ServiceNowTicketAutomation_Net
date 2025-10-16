@@ -9,3 +9,7 @@ This project is to automate the process of providing insights for servicenow inc
 
 Fake data are created for this project but they are based on actual cases in industry. 
 
+Design
+
+.Net API could connect to the react frontend and connect to a Ollma container to send requests and get responses. 
+
