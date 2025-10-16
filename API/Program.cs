@@ -17,7 +17,10 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.UseRouting();
-app.MapControllers();
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllers(); // Maps attribute-routed controllers
+});
 
 using var scope = app.Services.CreateScope();
 var services = scope.ServiceProvider;
