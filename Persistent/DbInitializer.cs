@@ -1,50 +1,46 @@
 using System;
 using Domain;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Linq;
 
-namespace Persistent;
-
-
-public class DbInitializer
+namespace Persistent
 {
-    
-    public static async Task SeedData(AppDbContext context)
+    public class DbInitializer
     {
-        if (context.Activities.Any()) return;
-
-        var activities = new List<Activity>
+        public static async Task SeedData(AppDbContext context)
         {
-            new() {
-                IncidentNumber="IN5001",
-                AssignedGroup= "SageMaker",
-                LongDescription="The user faced a username/password error on JupyterHub. Tried too clear browser cache, and  another Jupyterhub link but faced the same issue. restarted the PC, and tried a password reset. Logged in successfully but couldn't start the server. Referred to ML operation Chapter for further assistance.",
-                Team_Fixed_Issue="ML operation",
-                Team_Fixed_Issue_AI_Format = "",
-                Team_Included_in_Ticket = "ML operation , SageMaker",
-                Team_Included_in_Ticket_AI_Format = "",
-                NumberTeam_Included_in_Ticket = 0,
-                NumberTeam_Fixed_Issue = 0,
-                Is_AissignedGroup_ResponsibleTeam = "",
-                Is_AssignedGroup_Fixed_Issue = "",
-                Summary_Issue = "",
-                Summary_Issue_AI = "",
-                System = "",
-                System_AI = "",
-                Issue = "",
-                Issue_AI = "",
-                Root_Cause = "",
-                Duplicate = "",
-                Duplicate_AI = ""
-            }
+            if (context.Activities.Any()) return;
 
-        };
+            var activities = new List<Activity>
+            {
+                new() {
+                    IncidentNumber = "IN5001",
+                    AssignedGroup = "SageMaker",
+                    LongDescription = "The user faced a username/password error on JupyterHub. Tried too clear browser cache, and another Jupyterhub link but faced the same issue. restarted the PC, and tried a password reset. Logged in successfully but couldn't start the server. Referred to ML operation Chapter for further assistance.",
+                    Team_Fixed_Issue = "ML operation",
+                    Team_Fixed_Issue_AI_Format = null,
+                    Team_Included_in_Ticket = "ML operation , SageMaker",
+                    Team_Included_in_Ticket_AI_Format = null,
+                    NumberTeam_Included_in_Ticket = 0,
+                    NumberTeam_Fixed_Issue = 0,
+                    Is_AissignedGroup_ResponsibleTeam = null,
+                    Is_AssignedGroup_Fixed_Issue = null,
+                    Summary_Issue = null,
+                    Summary_Issue_AI = null,
+                    System = null,
+                    System_AI = null,
+                    Issue = null,
+                    Issue_AI = null,
+                    Root_Cause = null,
+                    Duplicate = null,
+                    Duplicate_AI = null
+                }
+            };
 
-        context.Activities.AddRange(activities);
+            context.Activities.AddRange(activities);
 
-        await context.SaveChangesAsync();
-
+            await context.SaveChangesAsync();
+        }
     }
-
 }
-
-    
-
