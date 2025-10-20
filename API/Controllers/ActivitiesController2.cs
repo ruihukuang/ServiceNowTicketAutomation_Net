@@ -12,7 +12,7 @@ namespace API.Controllers
 {
     public class ActivitiesController2(AppDbContext context) : BaseApiController
     {
-        [HttpPost]
+        [HttpPost("AI_summary")]
         public async Task<IActionResult> SendDataToApi()
         {
             using var httpClient = new HttpClient();
