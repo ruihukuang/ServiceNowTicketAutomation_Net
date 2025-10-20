@@ -28,34 +28,38 @@ namespace API.Controllers
 
             foreach (var longDescription in longDescriptions)
             {
-                // Remove single quotes from longDescription
-                var cleanedLongDescription = longDescription.Replace("'", "");
-
-                // Check if cleanedLongDescription is not empty
-                if (!string.IsNullOrWhiteSpace(cleanedLongDescription))
+                // Check if longDescription is not empty
+                if (!string.IsNullOrWhiteSpace(longDescription))
                 {
-                    var jsonObject = new
+                    // Remove single quotes from longDescription
+                    var cleanedLongDescription = longDescription.Replace("'", "");
+
+                    // Check if cleanedLongDescription is not empty
+                    if (!string.IsNullOrWhiteSpace(cleanedLongDescription))
                     {
-                        model = "myllama3",
-                        prompt = cleanedLongDescription,
-                        stream = false
-                    };
-
-                    var json = JsonSerializer.Serialize(jsonObject);
-
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                    // Send request asynchronously and process response
-                    tasks.Add(Task.Run(async () =>
-                    {
-                        var response = await httpClient.PostAsync("https://api.example.com/endpoint", content);
-                        var responseContent = await response.Content.ReadAsStringAsync();
-
-                        lock (responses)
+                        var jsonObject = new
                         {
-                            responses[cleanedLongDescription] = responseContent;
-                        }
-                    }));
+                            model = "myllama3",
+                            prompt = cleanedLongDescription,
+                            stream = false
+                        };
+
+                        var json = JsonSerializer.Serialize(jsonObject);
+
+                        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                        // Send request asynchronously and process response
+                        tasks.Add(Task.Run(async () =>
+                        {
+                            var response = await httpClient.PostAsync("https://api.example.com/endpoint", content);
+                            var responseContent = await response.Content.ReadAsStringAsync();
+
+                            lock (responses)
+                            {
+                                responses[cleanedLongDescription] = responseContent;
+                            }
+                        }));
+                    }
                 }
             }
 
@@ -65,20 +69,23 @@ namespace API.Controllers
             // Update database with responses
             foreach (var longDescription in longDescriptions)
             {
-                var cleanedLongDescription = longDescription.Replace("'", "");
-
-                if (!string.IsNullOrWhiteSpace(cleanedLongDescription) && responses.TryGetValue(cleanedLongDescription, out var responseContent))
+                if (!string.IsNullOrWhiteSpace(longDescription))
                 {
-                    var activity = await context.Activities.FirstOrDefaultAsync(a => a.LongDescription == cleanedLongDescription);
-                    if (activity != null)
+                    var cleanedLongDescription = longDescription.Replace("'", "");
+
+                    if (!string.IsNullOrWhiteSpace(cleanedLongDescription) && responses.TryGetValue(cleanedLongDescription, out var responseContent))
                     {
-                        activity.Summary_Issue_AI = responseContent;
-                        await context.SaveChangesAsync();
+                        var activity = await context.Activities.FirstOrDefaultAsync(a => a.LongDescription == cleanedLongDescription);
+                        if (activity != null)
+                        {
+                            activity.Summary_Issue_AI = responseContent;
+                            await context.SaveChangesAsync();
+                        }
                     }
                 }
             }
 
-            return Ok("Data processing completed.");
+            return Ok("Data processing using LLM completed.");
         }
     }
 }
