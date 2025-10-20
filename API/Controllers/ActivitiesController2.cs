@@ -15,17 +15,8 @@ using System.Text.RegularExpressions;
 
 namespace API.Controllers
 {
-    public class ActivitiesController2 : BaseApiController
+    public class ActivitiesController2(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
-        private readonly AppDbContext _context;
-        private readonly IHttpClientFactory _httpClientFactory;
-
-        public ActivitiesController2(AppDbContext context, IHttpClientFactory httpClientFactory)
-        {
-            _context = context;
-            _httpClientFactory = httpClientFactory;
-        }
-
         [HttpPost("AI_summary")]
         public async Task<IActionResult> SendDataToApi()
         {
@@ -74,7 +65,7 @@ namespace API.Controllers
                 };
 
                 var json = JsonSerializer.Serialize(requestBody);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var content = new StringContent(json, "application/json");
 
                 Console.WriteLine($"Sending request to Ollama for activity {Id}");
                 Console.WriteLine($"Request JSON: {json}");
