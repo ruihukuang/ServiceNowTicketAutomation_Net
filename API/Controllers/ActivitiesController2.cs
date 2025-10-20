@@ -17,6 +17,19 @@ namespace API.Controllers
 {
     public class ActivitiesController2(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
+        [HttpGet]
+        public IActionResult Test()
+        {
+            return Ok(new { 
+                Message = "ActivitiesController2 is working!", 
+                Timestamp = DateTime.UtcNow,
+                Endpoints = new[] {
+                    "POST /api/Activities2/AI_summary - Process AI summaries",
+                    "GET /api/Activities2 - Test endpoint"
+                }
+            });
+        }
+
         [HttpPost("AI_summary")]
         public async Task<IActionResult> SendDataToApi()
         {
@@ -29,7 +42,7 @@ namespace API.Controllers
             var tasks = new List<Task>();
 
             // Retrieve activities with their IDs for updating
-            var activities = await _context.Activities
+            var activities = await context.Activities
                 .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription))
                 .Select(a => new { a.Id, a.LongDescription })
                 .ToListAsync();
@@ -54,7 +67,7 @@ namespace API.Controllers
         {
             try
             {
-                using var httpClient = _httpClientFactory.CreateClient();
+                using var httpClient = httpClientFactory.CreateClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(30);
                 
                 var requestBody = new
@@ -65,7 +78,7 @@ namespace API.Controllers
                 };
 
                 var json = JsonSerializer.Serialize(requestBody);
-                var content = new StringContent(json, "application/json");
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 Console.WriteLine($"Sending request to Ollama for activity {Id}");
                 Console.WriteLine($"Request JSON: {json}");
@@ -141,7 +154,7 @@ namespace API.Controllers
             try
             {
                 // Only update the specific activity and verify the description matches our expectation
-                var activity = await _context.Activities
+                var activity = await context.Activities
                     .Where(a => a.Id == Id)
                     .FirstOrDefaultAsync();
                     
@@ -152,7 +165,7 @@ namespace API.Controllers
                     if (!string.IsNullOrEmpty(activity.LongDescription))
                     {
                         activity.Summary_Issue_AI = summary.Length > 500 ? summary.Substring(0, 500) : summary;
-                        await _context.SaveChangesAsync();
+                        await context.SaveChangesAsync();
                         Console.WriteLine($"Successfully updated Activity {Id}");
                     }
                     else
@@ -175,7 +188,7 @@ namespace API.Controllers
         {
             try
             {
-                using var httpClient = _httpClientFactory.CreateClient();
+                using var httpClient = httpClientFactory.CreateClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(5);
                 
                 var response = await httpClient.GetAsync("http://localhost:11434/api/tags");
