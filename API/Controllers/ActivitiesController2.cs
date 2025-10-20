@@ -51,7 +51,7 @@ namespace API.Controllers
                         // Send request asynchronously and process response
                         tasks.Add(Task.Run(async () =>
                         {
-                            var response = await httpClient.PostAsync("https://api.example.com/endpoint", content);
+                            var response = await httpClient.PostAsync("http://localhost:11434/api/generate", content);
                             var responseContent = await response.Content.ReadAsStringAsync();
 
                             lock (responses)
