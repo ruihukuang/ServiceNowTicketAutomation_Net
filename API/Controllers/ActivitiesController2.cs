@@ -11,6 +11,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+//curl.exe http://localhost:11434/api/generate -H "Content-Type: application/json" -d "@request.json" 
+
 namespace API.Controllers
 {
     public class ActivitiesController2 : BaseApiController
