@@ -10,15 +10,8 @@ using System.Globalization;
 
 namespace API.Controllers
 {
-    public class ActivitiesController2 : BaseApiController
+    public class ActivitiesController2(AppDbContext context) : BaseApiController
     {
-        private readonly AppDbContext context;
-
-        public ActivitiesController(AppDbContext context)
-        {
-            this.context = context;
-        }
-
         [HttpPost]
         public async Task<IActionResult> SendDataToApi()
         {
@@ -30,7 +23,6 @@ namespace API.Controllers
 
             // Retrieve LongDescriptions from the database
             var longDescriptions = await context.Activities
-                .Where(a => /* Add your criteria here, e.g., a.SomeColumn == someValue */)
                 .Select(a => a.LongDescription)
                 .ToListAsync();
 
