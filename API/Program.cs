@@ -14,14 +14,15 @@ builder.Services.AddDbContext<AppDbContext>(Opt =>
 
 });
 
+
+
+builder.Services.AddHttpClient();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.UseRouting();
-app.UseEndpoints(endpoints =>
-{
-    endpoints.MapControllers(); // Maps attribute-routed controllers
-});
+app.MapControllers();
 
 using var scope = app.Services.CreateScope();
 var services = scope.ServiceProvider;
