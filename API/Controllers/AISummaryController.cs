@@ -197,7 +197,7 @@ namespace API.Controllers
                         }
 
                         // Enforce 20-word limit and clean up the summary
-                        var finalSummary = LimitWordCount(rawSummary, 20);
+                        var finalSummary = LimitWordCount(rawSummary, 30);
                         
                         Console.WriteLine($"=== DEBUG FINAL SUMMARY ===");
                         Console.WriteLine($"Final summary: '{finalSummary}'");
