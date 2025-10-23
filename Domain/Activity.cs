@@ -13,11 +13,17 @@ namespace Domain
 
         public string? Team_Fixed_Issue { get; set; }
 
-        public string? Team_Fixed_Issue_AI_Format { get; set; }
-
         public string? Team_Included_in_Ticket { get; set; }
 
-        public string? Team_Included_in_Ticket_AI_Format { get; set; }
+        public string? ServiceOwner { get; set; }
+
+        public string? Priority { get; set; }
+        
+        public long? Guided_SLAdays { get; set; }
+
+        public string? Met_SLA { get; set; }
+
+        public long? ExtraDays_AfterSLAdays { get; set; }
 
         public int NumberTeam_Included_in_Ticket { get; set; }
         
@@ -41,6 +47,8 @@ namespace Domain
 
         public string? Root_Cause { get; set; }
 
+        public string? Root_Cause_AI { get; set; }
+
         public string? Duplicate { get; set; }
 
         public string? Duplicate_AI { get; set; }
@@ -57,5 +65,8 @@ namespace Domain
         public string? UpdatedDate_Year { get; set; }
         public string? UpdatedDate_Month { get; set; }
         public string? UpdatedDate_Day { get; set; }
+       
+
+
     }
 }

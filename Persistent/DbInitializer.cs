@@ -20,9 +20,12 @@ namespace Persistent
                     AssignedGroup = "SageMaker",
                     LongDescription = "The user faced a username/password error on JupyterHub. Tried too clear browser cache, and another Jupyterhub link but faced the same issue. restarted the PC, and tried a password reset. Logged in successfully but couldn't start the server. Referred to ML operation Chapter for further assistance.",
                     Team_Fixed_Issue = "ML operation",
-                    Team_Fixed_Issue_AI_Format = null,
                     Team_Included_in_Ticket = "ML operation , SageMaker",
-                    Team_Included_in_Ticket_AI_Format = null,
+                    ServiceOwner="Mark",
+                    Priority="P4",
+                    Guided_SLAdays=null,
+                    Met_SLA=null,
+                    ExtraDays_AfterSLAdays=null,
                     NumberTeam_Included_in_Ticket = 0,
                     NumberTeam_Fixed_Issue = 0,
                     Is_AissignedGroup_ResponsibleTeam = null,
@@ -34,6 +37,7 @@ namespace Persistent
                     Issue = null,
                     Issue_AI = null,
                     Root_Cause = null,
+                    Root_Cause_AI = null,
                     Duplicate = null,
                     Duplicate_AI = null,
                     OpenDate = DateTime.Parse("1/05/2025 10:24:34 AM", new CultureInfo("en-AU")),
@@ -43,7 +47,8 @@ namespace Persistent
                     OpenDate_Day = null,
                     UpdatedDate_Year =null,
                     UpdatedDate_Month=null,
-                    UpdatedDate_Day=null
+                    UpdatedDate_Day=null,
+
                 }
             };
 

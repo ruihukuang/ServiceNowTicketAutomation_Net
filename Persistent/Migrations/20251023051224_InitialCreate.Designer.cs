@@ -11,7 +11,7 @@ using Persistent;
 namespace Persistent.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251016044113_InitialCreate")]
+    [Migration("20251023051224_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -38,6 +38,12 @@ namespace Persistent.Migrations
                     b.Property<string>("Duplicate_AI")
                         .HasColumnType("TEXT");
 
+                    b.Property<long?>("ExtraDays_AfterSLAdays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("Guided_SLAdays")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("IncidentNumber")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -53,6 +59,9 @@ namespace Persistent.Migrations
 
                     b.Property<string>("LongDescription")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Met_SLA")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("NumberTeam_Fixed_Issue")
@@ -73,7 +82,16 @@ namespace Persistent.Migrations
                     b.Property<string>("OpenDate_Year")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Priority")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Root_Cause")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Root_Cause_AI")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServiceOwner")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Summary_Issue")
@@ -91,13 +109,7 @@ namespace Persistent.Migrations
                     b.Property<string>("Team_Fixed_Issue")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Team_Fixed_Issue_AI_Format")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Team_Included_in_Ticket")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Team_Included_in_Ticket_AI_Format")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedDate")
