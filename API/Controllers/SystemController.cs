@@ -16,17 +16,17 @@ using System.Text.RegularExpressions;
 namespace API.Controllers
 {
 
-    public class AISummaryController(AppDbContext context,IHttpClientFactory httpClientFactory) : BaseApiController
+    public class SystemController(AppDbContext context,IHttpClientFactory httpClientFactory) : BaseApiController
     {
 
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("AI Summary test controller is working!");
+            return Ok("AI system test controller is working!");
         }
 
 
-        [HttpPost("AI_summary")]
+        [HttpPost("AI_system")]
         public async Task<IActionResult> SendDataToApi()
         {
             // Log the incoming request details for Postman
@@ -122,7 +122,7 @@ namespace API.Controllers
                 var requestBody = new
                 {
                     model = "myllaama3",
-                    prompt = $"Provide a concise summary of this technical issue in length 150 or less: {longDescription}",
+                    prompt = $"Find systems including Jupyterhub or Zeppelin in the context provided: {longDescription} If systems are found in the context, return the system name only",
                     stream = false
                 };
 
@@ -196,8 +196,8 @@ namespace API.Controllers
                             Console.WriteLine($"=====================================");
                         }
 
-                        // Enforce 20-word limit and clean up the summary
-                        var finalSummary = LimitWordCount(rawSummary, 20);
+                        // Remove punctuation from the summary
+                        var finalSummary = RemovePunctuation(rawSummary);
                         
                         Console.WriteLine($"=== DEBUG FINAL SUMMARY ===");
                         Console.WriteLine($"Final summary: '{finalSummary}'");
@@ -281,22 +281,22 @@ namespace API.Controllers
                     if (summaries.TryGetValue(activity.Id, out var summary))
                     {
                         Console.WriteLine($"=== UPDATING ACTIVITY {activity.Id} ===");
-                        Console.WriteLine($"Current Summary_Issue_AI: '{activity.Summary_Issue_AI}'");
+                        Console.WriteLine($"Current System_AI: '{activity.System_AI}'");
                         Console.WriteLine($"New summary: '{summary}'");
                         Console.WriteLine($"New summary length: {summary.Length}");
                         
                         // Ensure we have a valid summary before updating
                         if (!string.IsNullOrWhiteSpace(summary))
                         {
-                            activity.Summary_Issue_AI = summary;
-                            Console.WriteLine($"Setting Summary_Issue_AI to: '{activity.Summary_Issue_AI}'");
+                            activity.System_AI = summary;
+                            Console.WriteLine($"Setting System_AI to: '{activity.System_AI}'");
                             updatedCount++;
                         }
                         else
                         {
                             Console.WriteLine($"WARNING: Empty summary for activity {activity.Id} - skipping update");
                             // Set a fallback value
-                            activity.Summary_Issue_AI = "AI summary not generated";
+                            activity.System_AI = "AI summary not generated";
                             updatedCount++;
                         }
                     }
@@ -325,9 +325,9 @@ namespace API.Controllers
             }
         }
 
-        private string LimitWordCount(string text, int maxWords)
+        private string RemovePunctuation(string text)
         {
-            Console.WriteLine($"=== DEBUG LIMIT WORD COUNT ===");
+            Console.WriteLine($"=== DEBUG REMOVE PUNCTUATION ===");
             Console.WriteLine($"Input text: '{text}'");
             Console.WriteLine($"Input text length: {text?.Length}");
             Console.WriteLine($"Is input null: {text == null}");
@@ -340,25 +340,13 @@ namespace API.Controllers
                 return string.Empty;
             }
 
-            // Split the text into words
-            var words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            // Remove punctuation using Regex
+            var result = Regex.Replace(text, @"[^\w\s]", "");
             
-            Console.WriteLine($"Words found: {words.Length}");
-            Console.WriteLine($"Words: [{string.Join("], [", words)}]");
+            // Remove extra whitespace
+            result = Regex.Replace(result, @"\s+", " ").Trim();
             
-            // Take only the first maxWords
-            var limitedWords = words.Take(maxWords).ToArray();
-            
-            // Join them back together
-            var result = string.Join(" ", limitedWords);
-            
-            // Ensure it ends with proper punctuation
-            if (!result.EndsWith(".") && !result.EndsWith("!") && !result.EndsWith("?"))
-            {
-                result += ".";
-            }
-            
-            Console.WriteLine($"Result: '{result}'");
+            Console.WriteLine($"Result after punctuation removal: '{result}'");
             Console.WriteLine($"Result length: {result.Length}");
             Console.WriteLine($"=====================================");
             
