@@ -31,7 +31,7 @@ namespace API.Controllers
         {
             // Log the incoming request details for Postman
             Console.WriteLine("=== POSTMAN REQUEST RECEIVED ===");
-            Console.WriteLine($"Endpoint: POST /api/AISummary/AI_summary");
+            Console.WriteLine($"Endpoint: POST /api/System/AI_system");
             Console.WriteLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
             Console.WriteLine($"Content-Type: application/json");
             Console.WriteLine("=================================");
@@ -69,19 +69,6 @@ namespace API.Controllers
             Console.WriteLine($"Total activities found: {activities.Count}");
             Console.WriteLine("Activities details:");
             
-            foreach (var activity in activities)
-            {
-                var shortDescription = activity.LongDescription.Length > 100 
-                    ? activity.LongDescription.Substring(0, 100) + "..." 
-                    : activity.LongDescription;
-                    
-                Console.WriteLine($"  ID: {activity.Id}");
-                Console.WriteLine($"  Description: {shortDescription}");
-                Console.WriteLine($"  Full Length: {activity.LongDescription.Length} characters");
-                Console.WriteLine($"  Cleaned: {activity.LongDescription.Replace("'", "").Trim().Length} characters (after cleaning)");
-                Console.WriteLine("  ---");
-            }
-            Console.WriteLine("======================================");
 
             foreach (var activity in activities)
             {
@@ -106,7 +93,7 @@ namespace API.Controllers
             await BatchUpdateActivitySummaries(summaries);
 
             return Ok(new { 
-                Message = "AI summary processing completed", 
+                Message = "AI system processing completed", 
                 ProcessedCount = summaries.Count,
                 Timestamp = DateTime.UtcNow
             });
@@ -210,7 +197,7 @@ namespace API.Controllers
                         {
                             summaries[Id] = finalSummary;
                         }
-                        Console.WriteLine($"Stored summary for activity {Id} in batch");
+                        Console.WriteLine($"Stored system for activity {Id} in batch");
                     }
                     catch (JsonException jsonEx)
                     {
@@ -294,15 +281,15 @@ namespace API.Controllers
                         }
                         else
                         {
-                            Console.WriteLine($"WARNING: Empty summary for activity {activity.Id} - skipping update");
+                            Console.WriteLine($"WARNING: Empty system for activity {activity.Id} - skipping update");
                             // Set a fallback value
-                            activity.System_AI = "AI summary not generated";
+                            activity.System_AI = "AI system not generated";
                             updatedCount++;
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"No summary found for activity {activity.Id}");
+                        Console.WriteLine($"No system found for activity {activity.Id}");
                     }
                 }
 

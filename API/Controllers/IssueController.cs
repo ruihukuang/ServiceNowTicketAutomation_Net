@@ -13,20 +13,20 @@ using System.Text.RegularExpressions;
 
 namespace API.Controllers
 {
-    public class AISummaryController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
+    public class IssueController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("AI Summary test controller is working!");
+            return Ok("AI issue test controller is working!");
         }
 
-        [HttpPost("AI_summary")]
+        [HttpPost("AI_Issue")]
         public async Task<IActionResult> SendDataToApi()
         {
             // Log the incoming request details for Postman
             Console.WriteLine("=== POSTMAN REQUEST RECEIVED ===");
-            Console.WriteLine($"Endpoint: POST /api/AISummary/AI_summary");
+            Console.WriteLine($"Endpoint: POST /api/Issue/AI_Issue");
             Console.WriteLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
             Console.WriteLine($"Content-Type: application/json");
             Console.WriteLine("=================================");
@@ -66,6 +66,20 @@ namespace API.Controllers
             
             foreach (var activity in activities)
             {
+                var shortDescription = activity.LongDescription.Length > 100 
+                    ? activity.LongDescription.Substring(0, 100) + "..." 
+                    : activity.LongDescription;
+                    
+                Console.WriteLine($"  ID: {activity.Id}");
+                Console.WriteLine($"  Description: {shortDescription}");
+                Console.WriteLine($"  Full Length: {activity.LongDescription.Length} characters");
+                Console.WriteLine($"  Cleaned: {activity.LongDescription.Replace("'", "").Trim().Length} characters (after cleaning)");
+                Console.WriteLine("  ---");
+            }
+            Console.WriteLine("======================================");
+
+            foreach (var activity in activities)
+            {
                 var cleanedLongDescription = activity.LongDescription.Replace("'", "").Trim();
                 
                 if (!string.IsNullOrWhiteSpace(cleanedLongDescription))
@@ -87,7 +101,7 @@ namespace API.Controllers
             await BatchUpdateActivitySummaries(summaries);
 
             return Ok(new { 
-                Message = "AI summary processing completed", 
+                Message = "AI issues processing completed", 
                 ProcessedCount = summaries.Count,
                 Timestamp = DateTime.UtcNow
             });
@@ -103,7 +117,33 @@ namespace API.Controllers
                 var requestBody = new
                 {
                     model = "myllaama3",
-                    prompt = $"Provide a concise summary with 150 characters or less for this technical issue : {longDescription}",
+                    prompt = $@"Analyze this statement and identify which categories it belongs to. Return up to THREE most relevant categories in order of relevance, separated by commas:
+
+                    Statement: {longDescription}
+
+                    Categories:
+                    1. Authentication & Authorization - Errors related to user identity verification or permissions
+                    Examples: 'Invalid username or password', 'Access Denied', 'Your session has expired', '401 Unauthorized', '403 Forbidden'
+
+                    2. Network - Errors related to connectivity and communication between components
+                    Examples: 'Connection Timed Out', 'Network Error: Please check your internet connection', 'DNS_PROBE_FINISHED_NO_INTERNET', 'Cannot reach the server'
+
+                    3. Functionality & Logic - Errors where features or business logic fail to execute correctly
+                    Examples: 'Failed to apply discount code', 'Unable to process your request at this time', 'Cannot divide by zero', 'The selected item is out of stock'
+
+                    4. Integration - Errors when communicating with external services, APIs, or third-party systems
+                    Examples: 'Payment Gateway Unavailable', 'Error 503: Service Unavailable', 'Could not retrieve data from weather service', 'SSO Provider not responding'
+
+                    5. Data Migration - Errors during data transfer between systems involving format or validation issues
+                    Examples: 'Migration Failed: Invalid date format', 'Duplicate key error during import', 'Data truncation error: field too long', 'Referential integrity violation'
+
+                    6. Client-Side - Errors occurring entirely in the user's browser or local application
+                    Examples: 'JavaScript Error: Cannot read properties of undefined', 'This field is required', 'Please enter a valid email address', 'Video could not be loaded'
+
+                    7. Infrastructure & Resources - Errors related to hardware, infrastructure, or resource constraints
+                    Examples: 'Server out of memory', 'Insufficient CPU resources', 'Disk space exhausted', 'GPU unavailable', 'Resource quota exceeded', 'Could not start server', 'Port already in use', 'Service failed to initialize'
+
+                    Return up to THREE category names only in order of relevance, separated by commas (e.g., 'Infrastructure & Resources, Network', 'Functionality & Logic, Integration', 'Client-Side', etc.) and the answers do not contain any numbers",
                     stream = false
                 };
 
@@ -177,7 +217,7 @@ namespace API.Controllers
                             Console.WriteLine($"=====================================");
                         }
 
-                        // Use the raw summary directly without word limit restrictions
+                        // Store the raw summary directly (no punctuation removal)
                         var finalSummary = rawSummary.Trim();
                         
                         Console.WriteLine($"=== DEBUG FINAL SUMMARY ===");
@@ -191,7 +231,7 @@ namespace API.Controllers
                         {
                             summaries[Id] = finalSummary;
                         }
-                        Console.WriteLine($"Stored summary for activity {Id} in batch");
+                        Console.WriteLine($"Stored issues for activity {Id} in batch");
                     }
                     catch (JsonException jsonEx)
                     {
@@ -262,28 +302,28 @@ namespace API.Controllers
                     if (summaries.TryGetValue(activity.Id, out var summary))
                     {
                         Console.WriteLine($"=== UPDATING ACTIVITY {activity.Id} ===");
-                        Console.WriteLine($"Current Summary_Issue_AI: '{activity.Summary_Issue_AI}'");
+                        Console.WriteLine($"Current Issue_AI: '{activity.Issue_AI}'");
                         Console.WriteLine($"New summary: '{summary}'");
                         Console.WriteLine($"New summary length: {summary.Length}");
                         
                         // Ensure we have a valid summary before updating
                         if (!string.IsNullOrWhiteSpace(summary))
                         {
-                            activity.Summary_Issue_AI = summary;
-                            Console.WriteLine($"Setting Summary_Issue_AI to: '{activity.Summary_Issue_AI}'");
+                            activity.Issue_AI = summary;
+                            Console.WriteLine($"Setting Issue_AI to: '{activity.Issue_AI}'");
                             updatedCount++;
                         }
                         else
                         {
-                            Console.WriteLine($"WARNING: Empty summary for activity {activity.Id} - skipping update");
+                            Console.WriteLine($"WARNING: Empty issues for activity {activity.Id} - skipping update");
                             // Set a fallback value
-                            activity.Summary_Issue_AI = "AI summary not generated";
+                            activity.Issue_AI = "AI issues not generated";
                             updatedCount++;
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"No summary found for activity {activity.Id}");
+                        Console.WriteLine($"No issues found for activity {activity.Id}");
                     }
                 }
 
