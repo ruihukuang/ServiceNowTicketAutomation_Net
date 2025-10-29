@@ -31,7 +31,38 @@ namespace API.Controllers
             Console.WriteLine($"Content-Type: application/json");
             Console.WriteLine("=================================");
 
-            // First, test if Ollama is accessible
+            // First, check if there are any activities that need processing
+            // (have LongDescription but no Summary_Issue_AI)
+            Console.WriteLine("Checking for activities that need AI summarization...");
+            var activitiesNeedingProcessing = await context.Activities
+                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) && 
+                           string.IsNullOrWhiteSpace(a.Summary_Issue_AI))
+                .Select(a => new { a.Id, a.LongDescription, a.Summary_Issue_AI })
+                .ToListAsync();
+
+            Console.WriteLine($"=== PROCESSING CHECK ===");
+            Console.WriteLine($"Activities needing AI summarization: {activitiesNeedingProcessing.Count}");
+            
+            // If no activities need processing, return early
+            if (activitiesNeedingProcessing.Count == 0)
+            {
+                Console.WriteLine("No activities need AI summarization - all Summary_Issue_AI fields are already populated");
+                return Ok(new { 
+                    Message = "No AI summary processing needed - all Summary_Issue_AI fields are already populated", 
+                    ProcessedCount = 0,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
+            // Show which activities need processing
+            Console.WriteLine("Activities that need processing:");
+            foreach (var activity in activitiesNeedingProcessing)
+            {
+                Console.WriteLine($"ID: {activity.Id}, Current Summary: '{activity.Summary_Issue_AI}'");
+            }
+            Console.WriteLine("======================================");
+
+            // Then, test if Ollama is accessible
             if (!await IsOllamaAccessible())
             {
                 Console.WriteLine("Ollama service is not accessible - returning 503");
@@ -42,29 +73,11 @@ namespace API.Controllers
             var summaries = new Dictionary<string, string>();
             var tasks = new List<Task>();
 
-            // Retrieve activities with their IDs for updating
-            Console.WriteLine("Querying database for activities with LongDescription...");
-            var activities = await context.Activities
-                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription))
-                .Select(a => new { a.Id, a.LongDescription })
-                .ToListAsync();
+            Console.WriteLine($"=== STARTING AI PROCESSING ===");
+            Console.WriteLine($"Processing {activitiesNeedingProcessing.Count} activities that need summarization");
 
-            // Verify activities exist in database
-            Console.WriteLine($"=== DATABASE VERIFICATION ===");
-            Console.WriteLine($"Activities retrieved from DB: {activities.Count}");
-            foreach (var activity in activities)
-            {
-                var exists = await context.Activities.AnyAsync(a => a.Id == activity.Id);
-                Console.WriteLine($"Activity {activity.Id} exists in database: {exists}");
-            }
-            Console.WriteLine("======================================");
-
-            // Show the activities in console
-            Console.WriteLine($"=== DATABASE ACTIVITIES RETRIEVED ===");
-            Console.WriteLine($"Total activities found: {activities.Count}");
-            Console.WriteLine("Activities details:");
-            
-            foreach (var activity in activities)
+            // Process only activities that need summarization
+            foreach (var activity in activitiesNeedingProcessing)
             {
                 var cleanedLongDescription = activity.LongDescription.Replace("'", "").Trim();
                 

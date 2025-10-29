@@ -143,20 +143,22 @@ namespace API.Controllers
         {
             // Extract: Get all records where date components are null
             var records_with_null_dates = await context.Activities
-                .Where(r => r.OpenDate_Year == null || r.OpenDate_Month == null || r.OpenDate_Day == null ||
-                            r.UpdatedDate_Year == null || r.UpdatedDate_Month == null || r.UpdatedDate_Day == null)
+                .Where(r => (r.OpenDate_Year == null || r.OpenDate_Month == null || r.OpenDate_Day == null ||
+                            r.UpdatedDate_Year == null || r.UpdatedDate_Month == null || r.UpdatedDate_Day == null) &&
+                            r.OpenDate.HasValue && r.UpdatedDate.HasValue)
                 .ToListAsync();
 
             // Extract year, month, and day from OpenDate and UpdatedDate
             foreach (var record in records_with_null_dates)
             {
-                record.OpenDate_Year = record.OpenDate.Year.ToString();
-                record.OpenDate_Month = record.OpenDate.Month.ToString();
-                record.OpenDate_Day = record.OpenDate.Day.ToString();
+                // Use .Value since we checked HasValue
+                record.OpenDate_Year = record.OpenDate.Value.Year.ToString();
+                record.OpenDate_Month = record.OpenDate.Value.Month.ToString();
+                record.OpenDate_Day = record.OpenDate.Value.Day.ToString();
 
-                record.UpdatedDate_Year = record.UpdatedDate.Year.ToString();
-                record.UpdatedDate_Month = record.UpdatedDate.Month.ToString();
-                record.UpdatedDate_Day = record.UpdatedDate.Day.ToString();
+                record.UpdatedDate_Year = record.UpdatedDate.Value.Year.ToString();
+                record.UpdatedDate_Month = record.UpdatedDate.Value.Month.ToString();
+                record.UpdatedDate_Day = record.UpdatedDate.Value.Day.ToString();
             }
         }
     }

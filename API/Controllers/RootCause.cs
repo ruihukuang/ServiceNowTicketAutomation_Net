@@ -31,7 +31,39 @@ namespace API.Controllers
             Console.WriteLine($"Content-Type: application/json");
             Console.WriteLine("=================================");
 
-            // First, test if Ollama is accessible
+            // First, check if there are any activities that need processing
+            // (have LongDescription and Root_Cause_AI but no Root_Cause_AI)
+            Console.WriteLine("Checking for activities that need AI root cause analysis...");
+            var activitiesNeedingProcessing = await context.Activities
+                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) && 
+                           !string.IsNullOrWhiteSpace(a.Issue_AI) &&
+                           string.IsNullOrWhiteSpace(a.Root_Cause_AI))
+                .Select(a => new { a.Id, a.LongDescription, a.Issue_AI, a.Root_Cause_AI })
+                .ToListAsync();
+
+            Console.WriteLine($"=== PROCESSING CHECK ===");
+            Console.WriteLine($"Activities needing AI root cause analysis: {activitiesNeedingProcessing.Count}");
+            
+            // If no activities need processing, return early
+            if (activitiesNeedingProcessing.Count == 0)
+            {
+                Console.WriteLine("No activities need AI root cause analysis - all Root_Cause_AI fields are already populated");
+                return Ok(new { 
+                    Message = "No AI root cause processing needed - all Root_Cause_AI fields are already populated", 
+                    ProcessedCount = 0,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
+            // Show which activities need processing
+            Console.WriteLine("Activities that need processing:");
+            foreach (var activity in activitiesNeedingProcessing)
+            {
+                Console.WriteLine($"ID: {activity.Id}, Current Root_Cause_AI: '{activity.Root_Cause_AI}'");
+            }
+            Console.WriteLine("======================================");
+
+            // Then, test if Ollama is accessible
             if (!await IsOllamaAccessible())
             {
                 Console.WriteLine("Ollama service is not accessible - returning 503");
@@ -42,30 +74,13 @@ namespace API.Controllers
             var summaries = new Dictionary<string, string>();
             var tasks = new List<Task>();
 
-            // Retrieve activities with their IDs for updating - only those with both LongDescription and Issue_AI
-            Console.WriteLine("Querying database for activities with LongDescription and Issue_AI...");
-            var activities = await context.Activities
-                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) && !string.IsNullOrWhiteSpace(a.Issue_AI))
-                .Select(a => new { a.Id, a.LongDescription, a.Issue_AI })
-                .ToListAsync();
+            Console.WriteLine($"=== STARTING AI PROCESSING ===");
+            Console.WriteLine($"Processing {activitiesNeedingProcessing.Count} activities that need root cause analysis");
 
-            // Check if there are any activities with Issue_AI data
-            Console.WriteLine($"=== ISSUE_AI DATA CHECK ===");
-            Console.WriteLine($"Activities with both LongDescription and Issue_AI: {activities.Count}");
-            
-            if (activities.Count == 0)
-            {
-                Console.WriteLine("No activities found with Issue_AI data and long description data. Please run the category classification first.");
-                return BadRequest(new { 
-                    Message = "No activities found with Issue_AI category data and and long description data. Please enter these data first.",
-                    ActivitiesWithIssueAI = activities.Count
-                });
-            }
-
-            // Verify activities exist in database and show Issue_AI data
+            // Verify activities exist in database and show Root_Cause_AI data
             Console.WriteLine($"=== DATABASE VERIFICATION ===");
-            Console.WriteLine($"Activities retrieved from DB: {activities.Count}");
-            foreach (var activity in activities)
+            Console.WriteLine($"Activities retrieved from DB: {activitiesNeedingProcessing.Count}");
+            foreach (var activity in activitiesNeedingProcessing)
             {
                 var exists = await context.Activities.AnyAsync(a => a.Id == activity.Id);
                 Console.WriteLine($"Activity {activity.Id} exists in database: {exists}");
@@ -75,10 +90,11 @@ namespace API.Controllers
 
             // Show the activities in console
             Console.WriteLine($"=== DATABASE ACTIVITIES RETRIEVED ===");
-            Console.WriteLine($"Total activities found with Issue_AI data: {activities.Count}");
+            Console.WriteLine($"Total activities found with Root_Cause_AI data: {activitiesNeedingProcessing.Count}");
             Console.WriteLine("======================================");
 
-            foreach (var activity in activities)
+            // Process only activities that need root cause analysis
+            foreach (var activity in activitiesNeedingProcessing)
             {
                 var cleanedLongDescription = activity.LongDescription.Replace("'", "").Trim();
                 
@@ -88,7 +104,7 @@ namespace API.Controllers
                 }
                 else
                 {
-                    Console.WriteLine($"Skipping activity {activity.Id} - missing LongDescription or Issue_AI data");
+                    Console.WriteLine($"Skipping activity {activity.Id} - missing LongDescription or Root_Cause_AI data");
                 }
             }
 
@@ -105,9 +121,9 @@ namespace API.Controllers
             await BatchUpdateActivitySummaries(summaries);
 
             return Ok(new { 
-                Message = "AI root cause processing completed", 
+                Message = "AI root causes processing completed", 
                 ProcessedCount = summaries.Count,
-                ActivitiesWithIssueAI = activities.Count,
+                ActivitiesWithRootCauseAI = activitiesNeedingProcessing.Count,
                 Timestamp = DateTime.UtcNow
             });
         }
@@ -188,7 +204,7 @@ namespace API.Controllers
                     - Operating system or kernel issues
                     - Virtualization/containerization problems
 
-                   Return up to THREE root causes in order of likelihood according to each category in {Issue_AI}, separated by commas (e.g., 'Resource exhaustion, Configuration errors, Hardware failure', 'Software bugs, Data validation issues', etc.)",
+                   Return up root causes according to each category in {Issue_AI}, separated by commas (e.g., 'Resource exhaustion, Configuration errors, Hardware failure', 'Software bugs, Data validation issues', etc.)",
                     stream = false
                 };
 

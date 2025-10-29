@@ -54,8 +54,8 @@ namespace Domain
         public string? Duplicate_AI { get; set; }
 
         // New DateTime properties
-        public DateTime OpenDate { get; set; }
-        public DateTime UpdatedDate { get; set; }
+        public DateTime? OpenDate { get; set; }
+        public DateTime? UpdatedDate { get; set; }
 
         // New string properties for date components
         public string? OpenDate_Year { get; set; }
