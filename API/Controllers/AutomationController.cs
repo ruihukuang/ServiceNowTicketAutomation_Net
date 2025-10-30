@@ -20,26 +20,87 @@ namespace API.Controllers
         [HttpPost("process_further")]
         public async Task<IActionResult> ProcessData()
         {
-            // Process fields in the correct order
-            await UpdateGuidedSLADays();
-            await UpdateMetSLA(); // Must complete before UpdateExtraDaysAfterSLA
-            await UpdateExtraDaysAfterSLA(); // Depends on Met_SLA being populated
-            await UpdateIsAssignedGroupResponsibleTeam();
+            // Check if fields are null before processing
+            var hasGuidedSLADays = await HasNullGuidedSLADays();
+            var hasMetSLA = await HasNullMetSLA();
+            var hasExtraDaysAfterSLA = await HasNullExtraDaysAfterSLA();
+            var hasIsAssignedGroupResponsibleTeam = await HasNullIsAssignedGroupResponsibleTeam();
+
+            Console.WriteLine($"Field status - Guided_SLAdays: {(hasGuidedSLADays ? "has nulls" : "all set")}");
+            Console.WriteLine($"Field status - Met_SLA: {(hasMetSLA ? "has nulls" : "all set")}");
+            Console.WriteLine($"Field status - ExtraDays_AfterSLAdays: {(hasExtraDaysAfterSLA ? "has nulls" : "all set")}");
+            Console.WriteLine($"Field status - Is_AissignedGroup_ResponsibleTeam: {(hasIsAssignedGroupResponsibleTeam ? "has nulls" : "all set")}");
+
+            // Process fields in the correct order only if they have null values
+            if (hasGuidedSLADays)
+            {
+                await UpdateGuidedSLADays();
+            }
+
+            if (hasMetSLA)
+            {
+                await UpdateMetSLA(); // Must complete before UpdateExtraDaysAfterSLA
+            }
+
+            if (hasExtraDaysAfterSLA)
+            {
+                await UpdateExtraDaysAfterSLA(); // Depends on Met_SLA being populated
+            }
+
+            if (hasIsAssignedGroupResponsibleTeam)
+            {
+                await UpdateIsAssignedGroupResponsibleTeam();
+            }
 
             // Save changes to the database
             await context.SaveChangesAsync();
 
-            return Ok("Another data processing completed.");
+            return Ok("Further data processing completed with null checks.");
+        }
+
+        private async Task<bool> HasNullGuidedSLADays()
+        {
+            return await context.Activities
+                .AnyAsync(r => r.Guided_SLAdays == null && 
+                              r.Priority != null && 
+                              r.Priority.ToUpper() == "P4");
+        }
+
+        private async Task<bool> HasNullMetSLA()
+        {
+            return await context.Activities
+                .AnyAsync(r => r.Met_SLA == null && 
+                              r.OpenDate.HasValue && 
+                              r.UpdatedDate.HasValue && 
+                              (r.Guided_SLAdays != null || r.Priority != null));
+        }
+
+        private async Task<bool> HasNullExtraDaysAfterSLA()
+        {
+            return await context.Activities
+                .AnyAsync(r => (r.ExtraDays_AfterSLAdays == null && r.Met_SLA == "no") ||
+                              (r.ExtraDays_AfterSLAdays != null && r.Met_SLA != "no"));
+        }
+
+        private async Task<bool> HasNullIsAssignedGroupResponsibleTeam()
+        {
+            return await context.Activities
+                .AnyAsync(r => r.Is_AissignedGroup_ResponsibleTeam == null && 
+                              r.AssignedGroup != null);
         }
 
         private async Task UpdateGuidedSLADays()
         {
-            // Extract: Get all records where Priority is P4 and Guided_SLAdays is not set to 5
+            Console.WriteLine("Starting UpdateGuidedSLADays...");
+            
+            // Extract: Get all records where Priority is P4 and Guided_SLAdays is null
             var records_p4_priority = await context.Activities
                 .Where(r => r.Priority != null && 
                            r.Priority.ToUpper() == "P4" && 
-                           (r.Guided_SLAdays == null || r.Guided_SLAdays != 5))
+                           r.Guided_SLAdays == null)
                 .ToListAsync();
+
+            Console.WriteLine($"Found {records_p4_priority.Count} P4 records with null Guided_SLAdays");
 
             // Transform and Load: Set Guided_SLAdays to 5 for P4 priority records
             foreach (var record in records_p4_priority)
@@ -51,12 +112,17 @@ namespace API.Controllers
 
         private async Task UpdateMetSLA()
         {
-            // Extract: Get all records where we need to calculate Met_SLA
+            Console.WriteLine("Starting UpdateMetSLA...");
+            
+            // Extract: Get all records where Met_SLA is null and we can calculate it
             var records_to_check_sla = await context.Activities
-                .Where(r => r.OpenDate.HasValue && 
+                .Where(r => r.Met_SLA == null && 
+                           r.OpenDate.HasValue && 
                            r.UpdatedDate.HasValue && 
                            (r.Guided_SLAdays != null || r.Priority != null))
                 .ToListAsync();
+
+            Console.WriteLine($"Found {records_to_check_sla.Count} records with null Met_SLA that can be calculated");
 
             // Transform and Load: Calculate and update Met_SLA
             foreach (var record in records_to_check_sla)
@@ -89,20 +155,23 @@ namespace API.Controllers
 
         private async Task UpdateExtraDaysAfterSLA()
         {
+            Console.WriteLine("Starting UpdateExtraDaysAfterSLA...");
+            
             // First, save changes to ensure Met_SLA is persisted
             await context.SaveChangesAsync();
             Console.WriteLine("Saved changes to ensure Met_SLA values are persisted");
 
-            // Extract: Get all records where Met_SLA is "no" and ExtraDays_AfterSLAdays needs to be calculated
+            // Extract: Get records that need ExtraDays_AfterSLAdays calculation (null when Met_SLA is "no")
             var records_exceeded_sla = await context.Activities
                 .Where(r => r.Met_SLA == "no" && 
+                           r.ExtraDays_AfterSLAdays == null &&
                            r.OpenDate.HasValue && 
                            r.UpdatedDate.HasValue && 
                            r.Guided_SLAdays.HasValue &&
                            r.Guided_SLAdays > 0)
                 .ToListAsync();
 
-            Console.WriteLine($"Found {records_exceeded_sla.Count} records that exceeded SLA");
+            Console.WriteLine($"Found {records_exceeded_sla.Count} records that exceeded SLA with null ExtraDays_AfterSLAdays");
 
             // Transform and Load: Calculate extra days after SLA
             foreach (var record in records_exceeded_sla)
@@ -112,15 +181,15 @@ namespace API.Controllers
                 Console.WriteLine($"Set ExtraDays_AfterSLAdays to {record.ExtraDays_AfterSLAdays} for activity {record.Id}");
             }
 
-            // Set ExtraDays_AfterSLAdays to null for records that met SLA
-            var records_met_sla = await context.Activities
+            // Set ExtraDays_AfterSLAdays to null for records that met SLA but have it set
+            var records_met_sla_with_extra_days = await context.Activities
                 .Where(r => r.Met_SLA == "yes" && 
                            r.ExtraDays_AfterSLAdays != null)
                 .ToListAsync();
 
-            Console.WriteLine($"Found {records_met_sla.Count} records that met SLA but have ExtraDays_AfterSLAdays set");
+            Console.WriteLine($"Found {records_met_sla_with_extra_days.Count} records that met SLA but have ExtraDays_AfterSLAdays set");
 
-            foreach (var record in records_met_sla)
+            foreach (var record in records_met_sla_with_extra_days)
             {
                 record.ExtraDays_AfterSLAdays = null;
                 Console.WriteLine($"Set ExtraDays_AfterSLAdays to null for activity {record.Id} (SLA met)");
@@ -143,10 +212,15 @@ namespace API.Controllers
 
         private async Task UpdateIsAssignedGroupResponsibleTeam()
         {
-            // Extract: Get all records where AssignedGroup is not null and Is_AissignedGroup_ResponsibleTeam needs to be set
+            Console.WriteLine("Starting UpdateIsAssignedGroupResponsibleTeam...");
+            
+            // Extract: Get all records where AssignedGroup is not null and Is_AissignedGroup_ResponsibleTeam is null
             var records_assigned_group = await context.Activities
-                .Where(r => r.AssignedGroup != null)
+                .Where(r => r.AssignedGroup != null && 
+                           r.Is_AissignedGroup_ResponsibleTeam == null)
                 .ToListAsync();
+
+            Console.WriteLine($"Found {records_assigned_group.Count} records with AssignedGroup but null Is_AissignedGroup_ResponsibleTeam");
 
             // Transform and Load: Set Is_AissignedGroup_ResponsibleTeam based on AssignedGroup
             foreach (var record in records_assigned_group)

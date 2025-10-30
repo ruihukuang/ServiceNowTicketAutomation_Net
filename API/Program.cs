@@ -1,6 +1,9 @@
 
 using Microsoft.EntityFrameworkCore;
 using Persistent;
+using Application.Activities.Queries;
+using Application.Core;
+using MediatR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +17,9 @@ builder.Services.AddDbContext<AppDbContext>(Opt =>
 
 });
 
+builder.Services.AddMediatR(x => x.RegisterServicesFromAssemblyContaining<GetActivityList.Handler>());
 
+builder.Services.AddAutoMapper(typeof(MappingProfiles));
 
 builder.Services.AddHttpClient();
 
