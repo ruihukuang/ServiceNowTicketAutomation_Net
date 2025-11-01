@@ -9,24 +9,24 @@ namespace Application.Activities.Commands;
 
 public class EditActivity
 {
-    public class Command : IRequest
+    public class Command : IRequest<string>
     {
         public required Activity Activity { get; set; }
     }
     
-    public class Handler(AppDbContext context, IMapper mapper) : IRequestHandler<Command>
+    public class Handler(AppDbContext context, IMapper mapper) : IRequestHandler<Command, string>
     {
-        public async Task Handle(Command request,CancellationToken cancellationToken)
+        public async Task<string> Handle(Command request, CancellationToken cancellationToken)
         {
-            var activity=await context.Activities
+            var activity = await context.Activities
                          .FindAsync([request.Activity.Id], cancellationToken)
                              ?? throw new Exception("Could not find activity");
 
-           mapper.Map(request.Activity, activity);
+            mapper.Map(request.Activity, activity);
 
             await context.SaveChangesAsync(cancellationToken);
 
+            return request.Activity.Id;
         }
     }
-
 }
