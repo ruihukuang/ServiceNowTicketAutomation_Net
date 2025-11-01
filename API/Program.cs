@@ -23,9 +23,25 @@ builder.Services.AddAutoMapper(typeof(MappingProfiles));
 
 builder.Services.AddHttpClient();
 
+// Add CORS policy
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000") // Your React app URLs
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+// Use CORS (before UseAuthorization and UseEndpoints)
+
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseCors("AllowReactApp");
 app.UseRouting();
 app.MapControllers();
 

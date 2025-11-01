@@ -19,10 +19,22 @@ namespace API.Controllers
             return await Mediator.Send(new GetActivityList.Query());
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("id/{id}")]
         public async Task<ActionResult<Activity>> GetActivitiesDetails(string id)
         {
             return await Mediator.Send(new GetActivityDetail.Query { Id = id });
+        }
+
+        [HttpGet("incident/{incidentNumber}")]
+        public async Task<ActionResult<string>> GetActivityIncidentNumber(string incidentNumber)
+        {
+            return await Mediator.Send(new GetActivityIncidentNumber.Query { IncidentNumber = incidentNumber });
+        }
+
+        [HttpGet("incident/details/{incidentNumber}")]
+        public async Task<ActionResult<List<Activity>>> GetActivityIncidentNumberDetails(string incidentNumber)
+        {
+            return await Mediator.Send(new GetActivityIncidentNumberDetails.Query { IncidentNumber = incidentNumber });
         }
 
         [HttpPost]
@@ -32,11 +44,9 @@ namespace API.Controllers
         }
 
         [HttpPut]
-        public async Task<ActionResult> EditActivity(Activity activity)
+        public async Task<ActionResult<string>> EditActivity(Activity activity)
         {
-            await Mediator.Send(new EditActivity.Command { Activity = activity });
-
-            return NoContent();
+            return await Mediator.Send(new EditActivity.Command { Activity = activity });
         }
         
         [HttpDelete("{id}")]
