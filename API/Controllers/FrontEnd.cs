@@ -19,6 +19,29 @@ namespace API.Controllers
             return await Mediator.Send(new GetActivityList.Query());
         }
 
+        [HttpGet("NeedProcessList")]
+        public async Task<ActionResult<List<Activity>>> GetActiviGetActivityListNeedProcess()
+        {
+            return await Mediator.Send(new GetActivityListNeedProcess.Query());
+        }
+
+        [HttpGet("ReviewList")]
+        public async Task<ActionResult<List<Activity>>> GetActivityListReview()
+        {
+            return await Mediator.Send(new GetActivityListReview.Query());
+        }
+        
+        // NEW: Get activities by specific year and/or month
+        [HttpGet("byDate")]
+        public async Task<ActionResult<List<Activity>>> GetActivitiesByDate([FromQuery] string? year, [FromQuery] string? month)
+        {
+            return await Mediator.Send(new GetActivityListByDate.Query 
+            { 
+                Year = year, 
+                Month = month 
+            });
+        }
+
         [HttpGet("id/{id}")]
         public async Task<ActionResult<Activity>> GetActivitiesDetails(string id)
         {
