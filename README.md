@@ -6,7 +6,7 @@ This project is to automate the process of providing insights for ServiceNow inc
 1 Whether SLA is met and What are average extra days to fix issues if SLA is met  
 2 Whether tickets are assigned to right responsible team, the responsible team fix the issues and whether extra team are included to affect metting SLA.    
 3 What are persistent problems and root causes in which platforms.  
-4 Duplicate tickets    
+4 Identify duplicate tickets in groups.    
 
 Fake data are created for this project but they are based on actual cases in industry. 
 
