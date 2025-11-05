@@ -13,54 +13,88 @@ using System.Text.RegularExpressions;
 
 namespace API.Controllers
 {
-    public class AISummaryController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
+    public class AISummaryDateController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("AI Summary test controller is working!");
+            return Ok("AI summary processing API with date filters is working!");
         }
 
-        [HttpPost("AI_summary")]
-        public async Task<IActionResult> SendDataToApi()
+        [HttpPost("AI_summary_date")]
+        public async Task<IActionResult> SendDataToApi([FromQuery] string? year = null, [FromQuery] string? month = null)
         {
-            // Log the incoming request details for Postman
+            // Log the incoming request details
             Console.WriteLine("=== POSTMAN REQUEST RECEIVED ===");
             Console.WriteLine($"Endpoint: POST /api/AISummary/AI_summary");
             Console.WriteLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
-            Console.WriteLine($"Content-Type: application/json");
+            Console.WriteLine($"Year filter: {year ?? "Not specified"}");
+            Console.WriteLine($"Month filter: {month ?? "Not specified"}");
             Console.WriteLine("=================================");
 
-            // First, check if there are any activities that need processing
-            // (have LongDescription but no Summary_Issue_AI)
+            // Build query for activities that need processing
             Console.WriteLine("Checking for activities that need AI summarization...");
-            var activitiesNeedingProcessing = await context.Activities
-                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) && 
-                           string.IsNullOrWhiteSpace(a.Summary_Issue_AI))
-                .Select(a => new { a.Id, a.LongDescription, a.Summary_Issue_AI })
+            var query = context.Activities
+                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription));
+
+            // Apply year filter if provided
+            if (!string.IsNullOrEmpty(year))
+            {
+                query = query.Where(a => a.OpenDate_Year == year);
+                Console.WriteLine($"Applied year filter: {year}");
+            }
+
+            // Apply month filter if provided
+            if (!string.IsNullOrEmpty(month))
+            {
+                query = query.Where(a => a.OpenDate_Month == month);
+                Console.WriteLine($"Applied month filter: {month}");
+            }
+
+            // Ensure both year and month are specified in the data (not null or empty)
+            query = query.Where(a => 
+                !string.IsNullOrEmpty(a.OpenDate_Year) && 
+                !string.IsNullOrEmpty(a.OpenDate_Month));
+
+            var activitiesNeedingProcessing = await query
+                .Select(a => new { a.Id, a.LongDescription, a.Summary_Issue_AI, a.OpenDate_Year, a.OpenDate_Month })
                 .ToListAsync();
 
             Console.WriteLine($"=== PROCESSING CHECK ===");
             Console.WriteLine($"Activities needing AI summarization: {activitiesNeedingProcessing.Count}");
             
-            // If no activities need processing, return early
-            if (activitiesNeedingProcessing.Count == 0)
+            // Show filter details
+            if (!string.IsNullOrEmpty(year) || !string.IsNullOrEmpty(month))
             {
-                Console.WriteLine("No activities need AI summarization - all Summary_Issue_AI fields are already populated");
-                return Ok(new { 
-                    Message = "No AI summary processing needed - all Summary_Issue_AI fields are already populated", 
-                    ProcessedCount = 0,
-                    Timestamp = DateTime.UtcNow
-                });
+                Console.WriteLine($"Filtered by - Year: {year ?? "Any"}, Month: {month ?? "Any"}");
             }
 
-            // Show which activities need processing
+            // Show which activities need processing with their dates
             Console.WriteLine("Activities that need processing:");
             foreach (var activity in activitiesNeedingProcessing)
             {
-                Console.WriteLine($"ID: {activity.Id}, Current Summary: '{activity.Summary_Issue_AI}'");
+                Console.WriteLine($"ID: {activity.Id}, Date: {activity.OpenDate_Year}-{activity.OpenDate_Month}, Current Summary: '{activity.Summary_Issue_AI}'");
             }
             Console.WriteLine("======================================");
+
+            // If no activities need processing, return early
+            if (activitiesNeedingProcessing.Count == 0)
+            {
+                var message = "No activities need AI summarization";
+                if (!string.IsNullOrEmpty(year) || !string.IsNullOrEmpty(month))
+                {
+                    message += $" for the specified filters (Year: {year ?? "Any"}, Month: {month ?? "Any"})";
+                }
+                message += " - all Summary_Issue_AI fields are already populated";
+                
+                return Ok(new { 
+                    Message = message, 
+                    ProcessedCount = 0,
+                    YearFilter = year,
+                    MonthFilter = month,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
 
             // Then, test if Ollama is accessible
             if (!await IsOllamaAccessible())
@@ -75,6 +109,10 @@ namespace API.Controllers
 
             Console.WriteLine($"=== STARTING AI PROCESSING ===");
             Console.WriteLine($"Processing {activitiesNeedingProcessing.Count} activities that need summarization");
+            if (!string.IsNullOrEmpty(year) || !string.IsNullOrEmpty(month))
+            {
+                Console.WriteLine($"Filter criteria - Year: {year ?? "Any"}, Month: {month ?? "Any"}");
+            }
 
             // Process only activities that need summarization
             foreach (var activity in activitiesNeedingProcessing)
@@ -100,8 +138,10 @@ namespace API.Controllers
             await BatchUpdateActivitySummaries(summaries);
 
             return Ok(new { 
-                Message = "AI summary processing completed", 
+                Message = "AI summary processing for selected period completed", 
                 ProcessedCount = summaries.Count,
+                YearFilter = year,
+                MonthFilter = month,
                 Timestamp = DateTime.UtcNow
             });
         }
@@ -124,22 +164,16 @@ namespace API.Controllers
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 Console.WriteLine($"Sending request to Ollama for activity {Id}");
-                Console.WriteLine($"Request JSON: {json}");
                 
                 var response = await httpClient.PostAsync("http://localhost:11434/api/generate", content);
                 
                 if (response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"Received response for activity {Id}: {responseContent}");
                     
                     // Parse the JSON response to extract the actual text
                     try
                     {
-                        Console.WriteLine($"=== DEBUG JSON RESPONSE ===");
-                        Console.WriteLine($"Full JSON response: {responseContent}");
-                        Console.WriteLine($"=====================================");
-                        
                         // Use case-insensitive deserialization
                         var options = new JsonSerializerOptions
                         {
@@ -151,60 +185,37 @@ namespace API.Controllers
                         // Use the lowercase properties directly
                         var rawSummary = ollamaResponse?.response ?? "No response generated";
 
-                        Console.WriteLine($"=== DEBUG RAW SUMMARY EXTRACTION ===");
-                        Console.WriteLine($"Raw summary extracted: '{rawSummary}'");
-                        Console.WriteLine($"Raw summary length: {rawSummary?.Length}");
-                        Console.WriteLine($"Is raw summary null: {rawSummary == null}");
-                        Console.WriteLine($"Is raw summary empty: {string.IsNullOrEmpty(rawSummary)}");
-                        
-                        // Debug the entire OllamaResponse object
-                        Console.WriteLine($"OllamaResponse model: '{ollamaResponse?.model}'");
-                        Console.WriteLine($"OllamaResponse created_at: '{ollamaResponse?.created_at}'");
-                        Console.WriteLine($"OllamaResponse done: {ollamaResponse?.done}");
-                        Console.WriteLine($"OllamaResponse done_reason: '{ollamaResponse?.done_reason}'");
-                        Console.WriteLine($"=====================================");
-                        
                         // If rawSummary is empty, try to extract manually from JSON
                         if (string.IsNullOrEmpty(rawSummary))
                         {
-                            Console.WriteLine("=== ATTEMPTING MANUAL JSON EXTRACTION ===");
                             try
                             {
                                 using JsonDocument document = JsonDocument.Parse(responseContent);
                                 if (document.RootElement.TryGetProperty("response", out JsonElement responseElement))
                                 {
                                     rawSummary = responseElement.GetString() ?? "Manual extraction failed";
-                                    Console.WriteLine($"Manually extracted response: '{rawSummary}'");
                                 }
                                 else
                                 {
                                     rawSummary = "Response property not found in JSON";
-                                    Console.WriteLine("Response property not found in JSON");
                                 }
                             }
                             catch (Exception jsonEx)
                             {
                                 rawSummary = $"Manual JSON parsing failed: {jsonEx.Message}";
-                                Console.WriteLine($"Manual JSON parsing error: {jsonEx.Message}");
                             }
-                            Console.WriteLine($"=====================================");
                         }
 
                         // Use the raw summary directly without word limit restrictions
                         var finalSummary = rawSummary.Trim();
                         
-                        Console.WriteLine($"=== DEBUG FINAL SUMMARY ===");
-                        Console.WriteLine($"Final summary: '{finalSummary}'");
-                        Console.WriteLine($"Final summary length: {finalSummary.Length}");
-                        Console.WriteLine($"Word count: {finalSummary.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length}");
-                        Console.WriteLine($"=====================================");
+                        Console.WriteLine($"Generated summary for activity {Id} (length: {finalSummary.Length})");
 
                         // Store in dictionary for batch update
                         lock (summaries)
                         {
                             summaries[Id] = finalSummary;
                         }
-                        Console.WriteLine($"Stored summary for activity {Id} in batch");
                     }
                     catch (JsonException jsonEx)
                     {
@@ -245,14 +256,6 @@ namespace API.Controllers
                 Console.WriteLine($"=== STARTING BATCH UPDATE ===");
                 Console.WriteLine($"Total summaries to process: {summaries.Count}");
                 
-                // Debug: Show all summaries before update
-                Console.WriteLine("=== SUMMARIES TO UPDATE ===");
-                foreach (var (id, summary) in summaries)
-                {
-                    Console.WriteLine($"ID: {id}, Summary: '{summary}', Length: {summary?.Length}");
-                }
-                Console.WriteLine("============================");
-                
                 if (summaries.Count == 0)
                 {
                     Console.WriteLine("No summaries to update - skipping batch update");
@@ -261,8 +264,6 @@ namespace API.Controllers
 
                 // Get all activities that need updating
                 var activityIds = summaries.Keys.ToList();
-                Console.WriteLine($"Activity IDs to update: {string.Join(", ", activityIds)}");
-
                 var activitiesToUpdate = await context.Activities
                     .Where(a => activityIds.Contains(a.Id))
                     .ToListAsync();
@@ -274,29 +275,18 @@ namespace API.Controllers
                 {
                     if (summaries.TryGetValue(activity.Id, out var summary))
                     {
-                        Console.WriteLine($"=== UPDATING ACTIVITY {activity.Id} ===");
-                        Console.WriteLine($"Current Summary_Issue_AI: '{activity.Summary_Issue_AI}'");
-                        Console.WriteLine($"New summary: '{summary}'");
-                        Console.WriteLine($"New summary length: {summary.Length}");
-                        
                         // Ensure we have a valid summary before updating
                         if (!string.IsNullOrWhiteSpace(summary))
                         {
                             activity.Summary_Issue_AI = summary;
-                            Console.WriteLine($"Setting Summary_Issue_AI to: '{activity.Summary_Issue_AI}'");
                             updatedCount++;
                         }
                         else
                         {
-                            Console.WriteLine($"WARNING: Empty summary for activity {activity.Id} - skipping update");
                             // Set a fallback value
                             activity.Summary_Issue_AI = "AI summary not generated";
                             updatedCount++;
                         }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"No summary found for activity {activity.Id}");
                     }
                 }
 
@@ -316,6 +306,7 @@ namespace API.Controllers
                     Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
                 }
                 Console.WriteLine($"=== END BATCH UPDATE ERROR ===");
+                throw;
             }
         }
 

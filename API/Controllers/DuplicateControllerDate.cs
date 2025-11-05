@@ -13,40 +13,58 @@ using System.Text.RegularExpressions;
 
 namespace API.Controllers
 {
-    public class DuplicateController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
+    public class DuplicateDateController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("AI duplicate test controller is working!");
+            return Ok("AI duplicate processing API with date filters is working!");
         }
 
-        [HttpPost("AI_Duplicate")]
-        public async Task<IActionResult> SendDataToApi()
+        [HttpPost("AI_Duplicate_date")]
+        public async Task<IActionResult> SendDataToApi([FromQuery] string? year = null, [FromQuery] string? month = null)
         {
             // Log the incoming request details for Postman
             Console.WriteLine("=== POSTMAN REQUEST RECEIVED ===");
             Console.WriteLine($"Endpoint: POST /api/Duplicate/AI_Duplicate");
             Console.WriteLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
-            Console.WriteLine($"Content-Type: application/json");
+            Console.WriteLine($"Year filter: {year ?? "Not specified"}");
+            Console.WriteLine($"Month filter: {month ?? "Not specified"}");
             Console.WriteLine("=================================");
 
-            // First, check if there are any activities that need processing
-            // Only process records that don't have valid duplicate groups yet
-            Console.WriteLine("Checking for activities that need AI duplicate analysis...");
-            var activitiesNeedingProcessing = await context.Activities
+            // Build query based on filters
+            var query = context.Activities
                 .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) &&
                            !string.IsNullOrWhiteSpace(a.Issue_AI) &&
                            !string.IsNullOrWhiteSpace(a.System_AI) &&
                            a.OpenDate.HasValue &&
                            a.UpdatedDate.HasValue &&
-                           a.IncidentNumber != null &&
-                           (a.Duplicate_AI == null || 
-                            a.Duplicate_AI == "NO_DUPLICATE" || 
-                            !a.Duplicate_AI.StartsWith("[") ||
-                            a.Duplicate_AI.StartsWith("ERROR") ||
-                            a.Duplicate_AI.StartsWith("PROCESSING_ERROR") ||
-                            a.Duplicate_AI.StartsWith("API_ERROR")))
+                           a.IncidentNumber != null);
+
+            // Apply year filter if provided
+            if (!string.IsNullOrEmpty(year))
+            {
+                query = query.Where(a => a.OpenDate_Year == year);
+                Console.WriteLine($"Applied year filter: {year}");
+            }
+
+            // Apply month filter if provided
+            if (!string.IsNullOrEmpty(month))
+            {
+                query = query.Where(a => a.OpenDate_Month == month);
+                Console.WriteLine($"Applied month filter: {month}");
+            }
+
+            // Ensure both year and month are specified in the data (not null or empty)
+            query = query.Where(a => 
+                !string.IsNullOrEmpty(a.OpenDate_Year) && 
+                !string.IsNullOrEmpty(a.OpenDate_Month));
+
+
+            // First, check if there are any activities that need processing
+            // Only process records that don't have valid duplicate groups yet
+            Console.WriteLine("Checking for activities that need AI duplicate analysis...");
+            var activitiesNeedingProcessing = await query
                 .Select(a => new ActivityData 
                 { 
                     Id = a.Id, 
@@ -160,7 +178,7 @@ namespace API.Controllers
             await BatchUpdateActivityDuplicateResults(duplicateResults);
 
             return Ok(new { 
-                Message = "AI duplicates processing completed", 
+                Message = "AI duplicates processing for selected period completed", 
                 ProcessedCount = duplicateResults.Count,
                 ActivitiesWithDuplicateAI = activitiesNeedingProcessing.Count,
                 Timestamp = DateTime.UtcNow

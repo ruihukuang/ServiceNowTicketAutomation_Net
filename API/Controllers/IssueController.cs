@@ -69,7 +69,7 @@ namespace API.Controllers
                 return StatusCode(503, "Ollama service is not accessible. Please ensure it's running on localhost:11434");
             }
 
-            // Create a dictionary to store all summaries
+            // Create a dictionary to store all issues
             var summaries = new Dictionary<string, string>();
             var tasks = new List<Task>();
 
@@ -130,35 +130,42 @@ namespace API.Controllers
             try
             {
                 using var httpClient = httpClientFactory.CreateClient();
-                httpClient.Timeout = TimeSpan.FromSeconds(300);
+                httpClient.Timeout = TimeSpan.FromSeconds(3600);
                 
                 var requestBody = new
                 {
                     model = "myllaama3",
-                    prompt = $@"Analyze this statement and identify which categories it belongs to. Return up to THREE most relevant categories in order of relevance, separated by commas:
+                    prompt = $@"Analyze this statement and identify which categories it belongs to. 
 
                     Statement: {longDescription}
 
                     Categories:
-                    1. Authentication & Authorization - Errors related to user identity verification or permissions
+                    1. Authentication & Authorization 
+                    Errors related to user identity verification or permissions
                     Examples: 'Invalid username or password', 'Access Denied', 'Your session has expired', '401 Unauthorized', '403 Forbidden'
 
-                    2. Network - Errors related to connectivity and communication between components
+                    2. Network 
+                    Errors related to connectivity and communication between components
                     Examples: 'Connection Timed Out', 'Network Error: Please check your internet connection', 'DNS_PROBE_FINISHED_NO_INTERNET', 'Cannot reach the server'
 
-                    3. Functionality & Logic - Errors where features or business logic fail to execute correctly
+                    3. Functionality & Logic 
+                    Errors where features or business logic fail to execute correctly
                     Examples: 'Failed to apply discount code', 'Unable to process your request at this time', 'Cannot divide by zero', 'The selected item is out of stock'
 
-                    4. Integration - Errors when communicating with external services, APIs, or third-party systems
+                    4. Integration 
+                    Errors when communicating with external services, APIs, or third-party systems
                     Examples: 'Payment Gateway Unavailable', 'Error 503: Service Unavailable', 'Could not retrieve data from weather service', 'SSO Provider not responding'
 
-                    5. Data Migration - Errors during data transfer between systems involving format or validation issues
+                    5. Data Migration 
+                    Errors during data transfer between systems involving format or validation issues
                     Examples: 'Migration Failed: Invalid date format', 'Duplicate key error during import', 'Data truncation error: field too long', 'Referential integrity violation'
 
-                    6. Client-Side - Errors occurring entirely in the user's browser or local application
+                    6. Client-Side 
+                    Errors occurring entirely in the user's browser or local application
                     Examples: 'JavaScript Error: Cannot read properties of undefined', 'This field is required', 'Please enter a valid email address', 'Video could not be loaded'
 
-                    7. Infrastructure & Resources - Errors related to hardware, infrastructure, or resource constraints
+                    7. Infrastructure & Resources 
+                    Errors related to hardware, infrastructure, or resource constraints
                     Examples: 'Server out of memory', 'Insufficient CPU resources', 'Disk space exhausted', 'GPU unavailable', 'Resource quota exceeded', 'Could not start server', 'Port already in use', 'Service failed to initialize'
 
                     Return up to THREE category names only in order of relevance, separated by commas (e.g., 'Infrastructure & Resources, Network', 'Functionality & Logic, Integration', 'Client-Side', etc.) and the answers do not contain any numbers",

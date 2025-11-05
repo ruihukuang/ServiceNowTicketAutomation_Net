@@ -13,42 +13,43 @@ using System.Text.RegularExpressions;
 
 namespace API.Controllers
 {
-    public class AISummaryController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
+    public class RootCauseController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("AI Summary test controller is working!");
+            return Ok("AI root cause test controller is working!");
         }
 
-        [HttpPost("AI_summary")]
+        [HttpPost("AI_RootCause")]
         public async Task<IActionResult> SendDataToApi()
         {
             // Log the incoming request details for Postman
             Console.WriteLine("=== POSTMAN REQUEST RECEIVED ===");
-            Console.WriteLine($"Endpoint: POST /api/AISummary/AI_summary");
+            Console.WriteLine($"Endpoint: POST /api/RootCause/AI_RootCause");
             Console.WriteLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
             Console.WriteLine($"Content-Type: application/json");
             Console.WriteLine("=================================");
 
             // First, check if there are any activities that need processing
-            // (have LongDescription but no Summary_Issue_AI)
-            Console.WriteLine("Checking for activities that need AI summarization...");
+            // (have LongDescription and Root_Cause_AI but no Root_Cause_AI)
+            Console.WriteLine("Checking for activities that need AI root cause analysis...");
             var activitiesNeedingProcessing = await context.Activities
                 .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) && 
-                           string.IsNullOrWhiteSpace(a.Summary_Issue_AI))
-                .Select(a => new { a.Id, a.LongDescription, a.Summary_Issue_AI })
+                           !string.IsNullOrWhiteSpace(a.Issue_AI) &&
+                           string.IsNullOrWhiteSpace(a.Root_Cause_AI))
+                .Select(a => new { a.Id, a.LongDescription, a.Issue_AI, a.Root_Cause_AI })
                 .ToListAsync();
 
             Console.WriteLine($"=== PROCESSING CHECK ===");
-            Console.WriteLine($"Activities needing AI summarization: {activitiesNeedingProcessing.Count}");
+            Console.WriteLine($"Activities needing AI root cause analysis: {activitiesNeedingProcessing.Count}");
             
             // If no activities need processing, return early
             if (activitiesNeedingProcessing.Count == 0)
             {
-                Console.WriteLine("No activities need AI summarization - all Summary_Issue_AI fields are already populated");
+                Console.WriteLine("No activities need AI root cause analysis - all Root_Cause_AI fields are already populated");
                 return Ok(new { 
-                    Message = "No AI summary processing needed - all Summary_Issue_AI fields are already populated", 
+                    Message = "No AI root cause processing needed - all Root_Cause_AI fields are already populated", 
                     ProcessedCount = 0,
                     Timestamp = DateTime.UtcNow
                 });
@@ -58,7 +59,7 @@ namespace API.Controllers
             Console.WriteLine("Activities that need processing:");
             foreach (var activity in activitiesNeedingProcessing)
             {
-                Console.WriteLine($"ID: {activity.Id}, Current Summary: '{activity.Summary_Issue_AI}'");
+                Console.WriteLine($"ID: {activity.Id}, Current Root_Cause_AI: '{activity.Root_Cause_AI}'");
             }
             Console.WriteLine("======================================");
 
@@ -74,16 +75,36 @@ namespace API.Controllers
             var tasks = new List<Task>();
 
             Console.WriteLine($"=== STARTING AI PROCESSING ===");
-            Console.WriteLine($"Processing {activitiesNeedingProcessing.Count} activities that need summarization");
+            Console.WriteLine($"Processing {activitiesNeedingProcessing.Count} activities that need root cause analysis");
 
-            // Process only activities that need summarization
+            // Verify activities exist in database and show Root_Cause_AI data
+            Console.WriteLine($"=== DATABASE VERIFICATION ===");
+            Console.WriteLine($"Activities retrieved from DB: {activitiesNeedingProcessing.Count}");
+            foreach (var activity in activitiesNeedingProcessing)
+            {
+                var exists = await context.Activities.AnyAsync(a => a.Id == activity.Id);
+                Console.WriteLine($"Activity {activity.Id} exists in database: {exists}");
+                Console.WriteLine($"Activity {activity.Id} Issue_AI: '{activity.Issue_AI}'");
+            }
+            Console.WriteLine("======================================");
+
+            // Show the activities in console
+            Console.WriteLine($"=== DATABASE ACTIVITIES RETRIEVED ===");
+            Console.WriteLine($"Total activities found with Root_Cause_AI data: {activitiesNeedingProcessing.Count}");
+            Console.WriteLine("======================================");
+
+            // Process only activities that need root cause analysis
             foreach (var activity in activitiesNeedingProcessing)
             {
                 var cleanedLongDescription = activity.LongDescription.Replace("'", "").Trim();
                 
-                if (!string.IsNullOrWhiteSpace(cleanedLongDescription))
+                if (!string.IsNullOrWhiteSpace(cleanedLongDescription) && !string.IsNullOrWhiteSpace(activity.Issue_AI))
                 {
-                    tasks.Add(ProcessActivityAsync(activity.Id, cleanedLongDescription, summaries));
+                    tasks.Add(ProcessActivityAsync(activity.Id, cleanedLongDescription, activity.Issue_AI, summaries));
+                }
+                else
+                {
+                    Console.WriteLine($"Skipping activity {activity.Id} - missing LongDescription or Root_Cause_AI data");
                 }
             }
 
@@ -96,17 +117,18 @@ namespace API.Controllers
 
             // Batch update all activities at the end
             Console.WriteLine($"=== BATCH DATABASE UPDATE ===");
-            Console.WriteLine($"Number of summaries to update: {summaries.Count}");
+            Console.WriteLine($"Number of root causes to update: {summaries.Count}");
             await BatchUpdateActivitySummaries(summaries);
 
             return Ok(new { 
-                Message = "AI summary processing completed", 
+                Message = "AI root causes processing completed", 
                 ProcessedCount = summaries.Count,
+                ActivitiesWithRootCauseAI = activitiesNeedingProcessing.Count,
                 Timestamp = DateTime.UtcNow
             });
         }
 
-        private async Task ProcessActivityAsync(string Id, string longDescription, Dictionary<string, string> summaries)
+        private async Task ProcessActivityAsync(string Id, string longDescription, string Issue_AI, Dictionary<string, string> summaries)
         {
             try
             {
@@ -116,7 +138,73 @@ namespace API.Controllers
                 var requestBody = new
                 {
                     model = "myllaama3",
-                    prompt = $"Provide a concise summary with 150 characters or less for this technical issue : {longDescription}",
+                    prompt = $@"Analyze a technical issue statement and identify the most likely root causes based on the category/categories.
+
+                    Root causes should not be the same as a category or categories.
+
+                    Statement: {longDescription}
+
+                    Category: {Issue_AI}
+
+                    Potential Root Causes by Category:
+
+                    1. Root causes for a category Authentication & Authorization:
+                    - Invalid credentials (wrong password, expired tokens)
+                    - Account lockouts or suspensions
+                    - Insufficient permissions or role assignments
+                    - Session/timeout configuration issues
+                    - Certificate or SSL/TLS problems
+                    - Multi-factor authentication failures
+
+                    2. Root causes for a category Network:
+                    - Internet connectivity outages (ISP issues)
+                    - DNS resolution failures
+                    - Firewall or security group blocks
+                    - Router/switch hardware failures
+                    - Bandwidth limitations or throttling
+                    - Network configuration errors (IP, subnet, gateway)
+
+                    3. Root causes for a category Functionality & Logic:
+                    - Software bugs or coding errors
+                    - Race conditions in concurrent operations
+                    - Null pointer or exception handling issues
+                    - Business rule validation failures
+                    - Data integrity or consistency problems
+                    - Algorithm or calculation errors
+
+                    4. Root causes for a category Integration:
+                    - Third-party service downtime or maintenance
+                    - API version mismatches or deprecation
+                    - Authentication failures with external systems
+                    - Rate limiting or quota exceeded
+                    - Data format incompatibilities (JSON/XML schema)
+                    - Network latency between microservices
+
+                    5. Root causes for a category Data Migration:
+                    - Data type incompatibilities between systems
+                    - Character encoding issues (UTF-8 vs ASCII)
+                    - Referential integrity violations
+                    - Data truncation from field size differences
+                    - Missing required fields or validation rules
+                    - Custom field mapping errors
+
+                    6. Root causes for a category Client-Side:
+                    - Browser compatibility or version issues
+                    - JavaScript errors or library conflicts
+                    - Missing dependencies or CDN failures
+                    - CORS policy violations
+                    - Local storage or cache problems
+                    - Device-specific limitations (memory, CPU)
+
+                    7. Root causes for a category Infrastructure & Resources:
+                    - Hardware failures (CPU, memory, disk, network)
+                    - Resource exhaustion (memory leaks, disk space)
+                    - Configuration errors (ports, paths, permissions)
+                    - Scaling limitations (insufficient capacity)
+                    - Operating system or kernel issues
+                    - Virtualization/containerization problems
+
+                   Return up root causes according to each category in {Issue_AI}, separated by commas (e.g., 'Resource exhaustion, Configuration errors, Hardware failure', 'Software bugs, Data validation issues', etc.)",
                     stream = false
                 };
 
@@ -190,8 +278,8 @@ namespace API.Controllers
                             Console.WriteLine($"=====================================");
                         }
 
-                        // Use the raw summary directly without word limit restrictions
-                        var finalSummary = rawSummary.Trim();
+                        // Store the raw summary directly (no punctuation removal)
+                        var finalSummary = rawSummary.Trim().ToLower();
                         
                         Console.WriteLine($"=== DEBUG FINAL SUMMARY ===");
                         Console.WriteLine($"Final summary: '{finalSummary}'");
@@ -204,7 +292,7 @@ namespace API.Controllers
                         {
                             summaries[Id] = finalSummary;
                         }
-                        Console.WriteLine($"Stored summary for activity {Id} in batch");
+                        Console.WriteLine($"Stored root cause for activity {Id} in batch");
                     }
                     catch (JsonException jsonEx)
                     {
@@ -275,28 +363,28 @@ namespace API.Controllers
                     if (summaries.TryGetValue(activity.Id, out var summary))
                     {
                         Console.WriteLine($"=== UPDATING ACTIVITY {activity.Id} ===");
-                        Console.WriteLine($"Current Summary_Issue_AI: '{activity.Summary_Issue_AI}'");
+                        Console.WriteLine($"Current Root_Cause_AI: '{activity.Root_Cause_AI}'");
                         Console.WriteLine($"New summary: '{summary}'");
                         Console.WriteLine($"New summary length: {summary.Length}");
                         
                         // Ensure we have a valid summary before updating
                         if (!string.IsNullOrWhiteSpace(summary))
                         {
-                            activity.Summary_Issue_AI = summary;
-                            Console.WriteLine($"Setting Summary_Issue_AI to: '{activity.Summary_Issue_AI}'");
+                            activity.Root_Cause_AI = summary;
+                            Console.WriteLine($"Setting Root_Cause_AI to: '{activity.Root_Cause_AI}'");
                             updatedCount++;
                         }
                         else
                         {
-                            Console.WriteLine($"WARNING: Empty summary for activity {activity.Id} - skipping update");
+                            Console.WriteLine($"WARNING: Empty root cause for activity {activity.Id} - skipping update");
                             // Set a fallback value
-                            activity.Summary_Issue_AI = "AI summary not generated";
+                            activity.Root_Cause_AI = "AI root cause not generated";
                             updatedCount++;
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"No summary found for activity {activity.Id}");
+                        Console.WriteLine($"No root cause found for activity {activity.Id}");
                     }
                 }
 

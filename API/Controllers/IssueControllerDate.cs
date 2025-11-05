@@ -13,52 +13,81 @@ using System.Text.RegularExpressions;
 
 namespace API.Controllers
 {
-    public class AISummaryController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
+    public class IssueDateController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("AI Summary test controller is working!");
+            return Ok("AI issue processing API with date filters is working!");
         }
 
-        [HttpPost("AI_summary")]
-        public async Task<IActionResult> SendDataToApi()
+        [HttpPost("AI_Issue_date")]
+        public async Task<IActionResult> SendDataToApi([FromQuery] string? year = null, [FromQuery] string? month = null)
         {
             // Log the incoming request details for Postman
             Console.WriteLine("=== POSTMAN REQUEST RECEIVED ===");
-            Console.WriteLine($"Endpoint: POST /api/AISummary/AI_summary");
+            Console.WriteLine($"Endpoint: POST /api/Issue/AI_Issue");
             Console.WriteLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
-            Console.WriteLine($"Content-Type: application/json");
+            Console.WriteLine($"Year filter: {year ?? "Not specified"}");
+            Console.WriteLine($"Month filter: {month ?? "Not specified"}");
             Console.WriteLine("=================================");
 
-            // First, check if there are any activities that need processing
-            // (have LongDescription but no Summary_Issue_AI)
-            Console.WriteLine("Checking for activities that need AI summarization...");
-            var activitiesNeedingProcessing = await context.Activities
-                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) && 
-                           string.IsNullOrWhiteSpace(a.Summary_Issue_AI))
-                .Select(a => new { a.Id, a.LongDescription, a.Summary_Issue_AI })
+            // Build query based on filters
+            var query = context.Activities
+                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription));
+
+            // Apply year filter if provided
+            if (!string.IsNullOrEmpty(year))
+            {
+                query = query.Where(a => a.OpenDate_Year == year);
+                Console.WriteLine($"Applied year filter: {year}");
+            }
+
+            // Apply month filter if provided
+            if (!string.IsNullOrEmpty(month))
+            {
+                query = query.Where(a => a.OpenDate_Month == month);
+                Console.WriteLine($"Applied month filter: {month}");
+            }
+
+            // Ensure both year and month are specified in the data (not null or empty)
+            query = query.Where(a => 
+                !string.IsNullOrEmpty(a.OpenDate_Year) && 
+                !string.IsNullOrEmpty(a.OpenDate_Month));
+
+            // Get activities that need processing (removed Issue_AI null check)
+            Console.WriteLine("Checking for activities with LongDescription...");
+            var activitiesToProcess = await query
+                .Select(a => new { a.Id, a.LongDescription, a.Issue_AI, a.OpenDate_Year, a.OpenDate_Month })
                 .ToListAsync();
 
             Console.WriteLine($"=== PROCESSING CHECK ===");
-            Console.WriteLine($"Activities needing AI summarization: {activitiesNeedingProcessing.Count}");
-            
-            // If no activities need processing, return early
-            if (activitiesNeedingProcessing.Count == 0)
+            Console.WriteLine($"Activities found with LongDescription: {activitiesToProcess.Count}");
+
+            // Show filter details
+            if (!string.IsNullOrEmpty(year) || !string.IsNullOrEmpty(month))
             {
-                Console.WriteLine("No activities need AI summarization - all Summary_Issue_AI fields are already populated");
+                Console.WriteLine($"Filtered by - Year: {year ?? "Any"}, Month: {month ?? "Any"}");
+            }
+            
+            // If no activities found, return early
+            if (activitiesToProcess.Count == 0)
+            {
+                Console.WriteLine("No activities found with LongDescription matching the filters");
                 return Ok(new { 
-                    Message = "No AI summary processing needed - all Summary_Issue_AI fields are already populated", 
+                    Message = "No activities found with LongDescription matching the specified filters", 
                     ProcessedCount = 0,
+                    YearFilter = year,
+                    MonthFilter = month,
                     Timestamp = DateTime.UtcNow
                 });
             }
 
-            // Show which activities need processing
-            Console.WriteLine("Activities that need processing:");
-            foreach (var activity in activitiesNeedingProcessing)
+            // Show which activities will be processed
+            Console.WriteLine("Activities that will be processed:");
+            foreach (var activity in activitiesToProcess)
             {
-                Console.WriteLine($"ID: {activity.Id}, Current Summary: '{activity.Summary_Issue_AI}'");
+                Console.WriteLine($"ID: {activity.Id}, Date: {activity.OpenDate_Year}-{activity.OpenDate_Month}, Current Issue_AI: '{activity.Issue_AI}'");
             }
             Console.WriteLine("======================================");
 
@@ -69,21 +98,42 @@ namespace API.Controllers
                 return StatusCode(503, "Ollama service is not accessible. Please ensure it's running on localhost:11434");
             }
 
-            // Create a dictionary to store all summaries
+            // Create a dictionary to store all issues
             var summaries = new Dictionary<string, string>();
             var tasks = new List<Task>();
 
             Console.WriteLine($"=== STARTING AI PROCESSING ===");
-            Console.WriteLine($"Processing {activitiesNeedingProcessing.Count} activities that need summarization");
+            Console.WriteLine($"Processing {activitiesToProcess.Count} activities with LongDescription");
 
-            // Process only activities that need summarization
-            foreach (var activity in activitiesNeedingProcessing)
+            // Show the activities in console
+            Console.WriteLine($"=== DATABASE ACTIVITIES RETRIEVED ===");
+            Console.WriteLine($"Total activities found: {activitiesToProcess.Count}");
+            Console.WriteLine("Activities details:");
+            
+            foreach (var activity in activitiesToProcess)
+            {
+                var shortDescription = activity.LongDescription.Length > 100 
+                    ? activity.LongDescription.Substring(0, 100) + "..." 
+                    : activity.LongDescription;
+                    
+                Console.WriteLine($"  ID: {activity.Id}");
+                Console.WriteLine($"  Description: {shortDescription}");
+                Console.WriteLine($"  Full Length: {activity.LongDescription.Length} characters");
+                Console.WriteLine($"  Cleaned: {activity.LongDescription.Replace("'", "").Trim().Length} characters (after cleaning)");
+                Console.WriteLine($"  Current Issue_AI: '{activity.Issue_AI}'");
+                Console.WriteLine("  ---");
+            }
+            Console.WriteLine("======================================");
+
+            // Process all activities with LongDescription (regardless of existing Issue_AI value)
+            foreach (var activity in activitiesToProcess)
             {
                 var cleanedLongDescription = activity.LongDescription.Replace("'", "").Trim();
                 
                 if (!string.IsNullOrWhiteSpace(cleanedLongDescription))
                 {
                     tasks.Add(ProcessActivityAsync(activity.Id, cleanedLongDescription, summaries));
+                    // Each task populates the dictionary with NEW AI-generated content
                 }
             }
 
@@ -100,8 +150,10 @@ namespace API.Controllers
             await BatchUpdateActivitySummaries(summaries);
 
             return Ok(new { 
-                Message = "AI summary processing completed", 
+                Message = "AI issue processing for selected period completed", 
                 ProcessedCount = summaries.Count,
+                YearFilter = year,
+                MonthFilter = month,
                 Timestamp = DateTime.UtcNow
             });
         }
@@ -116,7 +168,68 @@ namespace API.Controllers
                 var requestBody = new
                 {
                     model = "myllaama3",
-                    prompt = $"Provide a concise summary with 150 characters or less for this technical issue : {longDescription}",
+                    prompt = $@"
+                    ANALYZE THIS STATEMENT AND CATEGORIZE IT:
+
+                    Statement: {longDescription}
+
+                    CATEGORIES TO CHOOSE FROM:
+                    - Authentication & Authorization
+                    - Network
+                    - Functionality & Logic  
+                    - Integration
+                    - Data Migration
+                    - Client-Side
+                    - Infrastructure & Resources
+
+                    CATEGORY DEFINITIONS AND EXAMPLES:
+
+                    1. Authentication & Authorization
+                    Errors related to user identity verification, login, or access permissions
+                    Examples: 'Invalid username or password', 'Access Denied', 'Your session has expired', 
+                    '401 Unauthorized', '403 Forbidden', 'Invalid Credentials', 'Authentication failures',
+                    'authentication issues', 'Initial username/password errors', 'authentication loops'
+
+                    2. Network
+                    Errors related to connectivity, communication, or network issues between components
+                    Examples: 'Connection Timed Out', 'Network Error', 'DNS_PROBE_FINISHED_NO_INTERNET', 
+                    'Cannot reach the server', 'connection failed', 'timeout', 'network unavailable'
+
+                    3. Functionality & Logic
+                    Errors where features, calculations, or business logic fail to execute correctly
+                    Examples: 'Failed to apply discount code', 'Unable to process your request', 
+                    'Cannot divide by zero', 'The selected item is out of stock', 'calculation error'
+
+                    4. Integration
+                    Errors when communicating with external services, APIs, or third-party systems
+                    Examples: 'Payment Gateway Unavailable', 'Service Unavailable', 
+                    'Could not retrieve data from external service', 'API not responding', 'third-party error'
+
+                    5. Data Migration
+                    Errors during data transfer, import, or export involving format or validation issues
+                    Examples: 'Migration Failed', 'Invalid date format', 'Duplicate key error', 
+                    'Data truncation error', 'Referential integrity violation', 'import/export error'
+
+                    6. Client-Side
+                    Errors occurring entirely in the user's browser, device, or local application
+                    Examples: 'JavaScript Error', 'This field is required', 'Please enter a valid email address', 
+                    'Video could not be loaded', 'browser-related errors', 'client error', 'UI issue'
+
+                    7. Infrastructure & Resources
+                    Errors related to hardware, servers, infrastructure, or resource constraints
+                    Examples: 'Server out of memory', 'Insufficient CPU resources', 'Disk space exhausted', 
+                    'Resource quota exceeded', 'Could not start server', 'Port already in use', 
+                    'Service failed to initialize'
+
+                    INSTRUCTIONS:
+                    - Analyze the statement and identify which categories it matches
+                    - Look for keywords, phrases, or concepts that align with the category examples
+                    - Return up to THREE most relevant category names in order of relevance
+                    - Separate category names with commas only
+                    - Do NOT include numbers, explanations, or additional text
+                    - Only return category names from the list above
+
+                    OUTPUT FORMAT: Category1, Category2, Category3 ",
                     stream = false
                 };
 
@@ -190,7 +303,7 @@ namespace API.Controllers
                             Console.WriteLine($"=====================================");
                         }
 
-                        // Use the raw summary directly without word limit restrictions
+                        // Store the raw summary directly (no punctuation removal)
                         var finalSummary = rawSummary.Trim();
                         
                         Console.WriteLine($"=== DEBUG FINAL SUMMARY ===");
@@ -204,7 +317,7 @@ namespace API.Controllers
                         {
                             summaries[Id] = finalSummary;
                         }
-                        Console.WriteLine($"Stored summary for activity {Id} in batch");
+                        Console.WriteLine($"Stored issues for activity {Id} in batch");
                     }
                     catch (JsonException jsonEx)
                     {
@@ -275,28 +388,27 @@ namespace API.Controllers
                     if (summaries.TryGetValue(activity.Id, out var summary))
                     {
                         Console.WriteLine($"=== UPDATING ACTIVITY {activity.Id} ===");
-                        Console.WriteLine($"Current Summary_Issue_AI: '{activity.Summary_Issue_AI}'");
-                        Console.WriteLine($"New summary: '{summary}'");
-                        Console.WriteLine($"New summary length: {summary.Length}");
+                        Console.WriteLine($"Current Issue_AI: '{activity.Issue_AI}'");
+     
                         
                         // Ensure we have a valid summary before updating
                         if (!string.IsNullOrWhiteSpace(summary))
                         {
-                            activity.Summary_Issue_AI = summary;
-                            Console.WriteLine($"Setting Summary_Issue_AI to: '{activity.Summary_Issue_AI}'");
+                            activity.Issue_AI = summary;
+                            Console.WriteLine($"Setting Issue_AI to: '{activity.Issue_AI}'");
                             updatedCount++;
                         }
                         else
                         {
-                            Console.WriteLine($"WARNING: Empty summary for activity {activity.Id} - skipping update");
+                            Console.WriteLine($"WARNING: Empty issues for activity {activity.Id} - skipping update");
                             // Set a fallback value
-                            activity.Summary_Issue_AI = "AI summary not generated";
+                            activity.Issue_AI = "AI issues not generated";
                             updatedCount++;
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"No summary found for activity {activity.Id}");
+                        Console.WriteLine($"No issues found for activity {activity.Id}");
                     }
                 }
 

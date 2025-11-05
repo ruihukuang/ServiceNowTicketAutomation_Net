@@ -13,32 +13,54 @@ using System.Text.RegularExpressions;
 
 namespace API.Controllers
 {
-    public class RootCauseController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
+    public class RootCauseDateController(AppDbContext context, IHttpClientFactory httpClientFactory) : BaseApiController
     {
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("AI root cause test controller is working!");
+            return Ok("AI root cause processing API with date filters is working!");
         }
 
-        [HttpPost("AI_RootCause")]
-        public async Task<IActionResult> SendDataToApi()
+        [HttpPost("AI_RootCause_date")]
+        public async Task<IActionResult> SendDataToApi([FromQuery] string? year = null, [FromQuery] string? month = null)
         {
             // Log the incoming request details for Postman
             Console.WriteLine("=== POSTMAN REQUEST RECEIVED ===");
             Console.WriteLine($"Endpoint: POST /api/RootCause/AI_RootCause");
             Console.WriteLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
-            Console.WriteLine($"Content-Type: application/json");
+            Console.WriteLine($"Year filter: {year ?? "Not specified"}");
+            Console.WriteLine($"Month filter: {month ?? "Not specified"}");
             Console.WriteLine("=================================");
+
+            // Build query based on filters
+            var query = context.Activities
+                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription)&& 
+                           !string.IsNullOrWhiteSpace(a.Issue_AI));
+
+            // Apply year filter if provided
+            if (!string.IsNullOrEmpty(year))
+            {
+                query = query.Where(a => a.OpenDate_Year == year);
+                Console.WriteLine($"Applied year filter: {year}");
+            }
+
+            // Apply month filter if provided
+            if (!string.IsNullOrEmpty(month))
+            {
+                query = query.Where(a => a.OpenDate_Month == month);
+                Console.WriteLine($"Applied month filter: {month}");
+            }
+
+            // Ensure both year and month are specified in the data (not null or empty)
+            query = query.Where(a => 
+                !string.IsNullOrEmpty(a.OpenDate_Year) && 
+                !string.IsNullOrEmpty(a.OpenDate_Month));
 
             // First, check if there are any activities that need processing
             // (have LongDescription and Root_Cause_AI but no Root_Cause_AI)
             Console.WriteLine("Checking for activities that need AI root cause analysis...");
-            var activitiesNeedingProcessing = await context.Activities
-                .Where(a => !string.IsNullOrWhiteSpace(a.LongDescription) && 
-                           !string.IsNullOrWhiteSpace(a.Issue_AI) &&
-                           string.IsNullOrWhiteSpace(a.Root_Cause_AI))
-                .Select(a => new { a.Id, a.LongDescription, a.Issue_AI, a.Root_Cause_AI })
+            var activitiesNeedingProcessing = await query
+                .Select(a => new { a.Id, a.LongDescription, a.Issue_AI, a.Root_Cause_AI,a.OpenDate_Year, a.OpenDate_Month })
                 .ToListAsync();
 
             Console.WriteLine($"=== PROCESSING CHECK ===");
@@ -121,7 +143,7 @@ namespace API.Controllers
             await BatchUpdateActivitySummaries(summaries);
 
             return Ok(new { 
-                Message = "AI root causes processing completed", 
+                Message = "AI root causes processing for selected period completed", 
                 ProcessedCount = summaries.Count,
                 ActivitiesWithRootCauseAI = activitiesNeedingProcessing.Count,
                 Timestamp = DateTime.UtcNow
@@ -133,7 +155,7 @@ namespace API.Controllers
             try
             {
                 using var httpClient = httpClientFactory.CreateClient();
-                httpClient.Timeout = TimeSpan.FromSeconds(300);
+                httpClient.Timeout = TimeSpan.FromSeconds(3600);
                 
                 var requestBody = new
                 {

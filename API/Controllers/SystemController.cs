@@ -116,7 +116,7 @@ namespace API.Controllers
             try
             {
                 using var httpClient = httpClientFactory.CreateClient();
-                httpClient.Timeout = TimeSpan.FromSeconds(300);
+                httpClient.Timeout = TimeSpan.FromSeconds(3600);
                 
                 var requestBody = new
                 {
