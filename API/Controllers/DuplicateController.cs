@@ -364,18 +364,18 @@ namespace API.Controllers
             {
                 model = "myllaama3",
                 prompt = $@"Calculate the semantic similarity between these two technical incident descriptions on a scale of 0.0 to 1.0, where:
-- 0.0 means completely different topics
-- 0.5 means somewhat related but different issues
-- 0.8 means very similar issues with minor differences
-- 1.0 means identical issues
+                - 0.0 means completely different topics
+                - 0.5 means somewhat related but different issues
+                - 0.8 means very similar issues with minor differences
+                - 1.0 means identical issues
 
-TEXT 1: {source}
+                TEXT 1: {source}
 
-TEXT 2: {target}
+                TEXT 2: {target}
 
-Analyze the semantic meaning, technical context, and core issues described in both texts.
+                Analyze the semantic meaning, technical context, and core issues described in both texts.
 
-Return ONLY a number between 0.0 and 1.0 representing the semantic similarity score. Do not include any explanations or additional text.",
+                Return ONLY a number between 0.0 and 1.0 representing the semantic similarity score. Do not include any explanations or additional text.",
                 stream = false
             };
 

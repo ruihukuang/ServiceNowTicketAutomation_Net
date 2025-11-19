@@ -77,9 +77,11 @@ namespace API.Controllers
 
         private async Task<bool> HasNullExtraDaysAfterSLA()
         {
+            // CHANGED: Now also check for records that should have 0 instead of null
             return await context.Activities
                 .AnyAsync(r => (r.ExtraDays_AfterSLAdays == null && r.Met_SLA == "no") ||
-                              (r.ExtraDays_AfterSLAdays != null && r.Met_SLA != "no"));
+                              (r.ExtraDays_AfterSLAdays != null && r.Met_SLA != "no") ||
+                              (r.ExtraDays_AfterSLAdays == null && (r.Met_SLA == "yes" || r.Met_SLA == null)));
         }
 
         private async Task<bool> HasNullIsAssignedGroupResponsibleTeam()
@@ -181,32 +183,36 @@ namespace API.Controllers
                 Console.WriteLine($"Set ExtraDays_AfterSLAdays to {record.ExtraDays_AfterSLAdays} for activity {record.Id}");
             }
 
-            // Set ExtraDays_AfterSLAdays to null for records that met SLA but have it set
-            var records_met_sla_with_extra_days = await context.Activities
-                .Where(r => r.Met_SLA == "yes" && 
-                           r.ExtraDays_AfterSLAdays != null)
+            // CHANGED: Set ExtraDays_AfterSLAdays to 0 for records that met SLA or don't have "no"
+            var records_met_sla_or_other = await context.Activities
+                .Where(r => (r.Met_SLA == "yes" || r.Met_SLA == null || r.Met_SLA != "no") && 
+                           r.ExtraDays_AfterSLAdays != 0) // Only update if not already 0
                 .ToListAsync();
 
-            Console.WriteLine($"Found {records_met_sla_with_extra_days.Count} records that met SLA but have ExtraDays_AfterSLAdays set");
+            Console.WriteLine($"Found {records_met_sla_or_other.Count} records that met SLA or other status to set ExtraDays_AfterSLAdays to 0");
 
-            foreach (var record in records_met_sla_with_extra_days)
+            foreach (var record in records_met_sla_or_other)
             {
-                record.ExtraDays_AfterSLAdays = null;
-                Console.WriteLine($"Set ExtraDays_AfterSLAdays to null for activity {record.Id} (SLA met)");
+                // BEFORE: record.ExtraDays_AfterSLAdays = null;
+                // AFTER: Set to 0 instead of null
+                record.ExtraDays_AfterSLAdays = 0;
+                Console.WriteLine($"Set ExtraDays_AfterSLAdays to 0 for activity {record.Id} (Met_SLA: '{record.Met_SLA}')");
             }
 
-            // Also set ExtraDays_AfterSLAdays to null for records without Met_SLA or where Met_SLA is not "no"
-            var records_clear_extra_days = await context.Activities
-                .Where(r => r.ExtraDays_AfterSLAdays != null && 
-                           r.Met_SLA != "no")
+            // CHANGED: Also set ExtraDays_AfterSLAdays to 0 for records without any SLA calculation but have null
+            var records_no_sla_calculation = await context.Activities
+                .Where(r => r.ExtraDays_AfterSLAdays == null && 
+                           (r.Met_SLA == null || r.Met_SLA != "no"))
                 .ToListAsync();
 
-            Console.WriteLine($"Found {records_clear_extra_days.Count} records to clear ExtraDays_AfterSLAdays");
+            Console.WriteLine($"Found {records_no_sla_calculation.Count} records without SLA calculation to set ExtraDays_AfterSLAdays to 0");
 
-            foreach (var record in records_clear_extra_days)
+            foreach (var record in records_no_sla_calculation)
             {
-                record.ExtraDays_AfterSLAdays = null;
-                Console.WriteLine($"Cleared ExtraDays_AfterSLAdays for activity {record.Id} (Met_SLA: '{record.Met_SLA}')");
+                // BEFORE: Would remain null
+                // AFTER: Set to 0
+                record.ExtraDays_AfterSLAdays = 0;
+                Console.WriteLine($"Set ExtraDays_AfterSLAdays to 0 for activity {record.Id} (no SLA exceeded)");
             }
         }
 

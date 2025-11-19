@@ -60,6 +60,19 @@ namespace API.Controllers
             return await Mediator.Send(new GetActivityIncidentNumberDetails.Query { IncidentNumber = incidentNumber });
         }
 
+        [HttpGet("duplicatelist")]
+        public async Task<ActionResult<List<Activity>>> GetActivityDuplicate()
+        {
+            return await Mediator.Send(new GetActivityDuplicate.Query());
+        }
+
+
+        [HttpGet("duplicatelistAI")]
+        public async Task<ActionResult<List<Activity>>> GetActivityDuplicateAI()
+        {
+            return await Mediator.Send(new GetActivityDuplicateAI.Query());
+        }
+        
         [HttpPost]
         public async Task<ActionResult<string>> CreateActivity(Activity activity)
         {
