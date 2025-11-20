@@ -31,7 +31,7 @@ namespace API.Controllers
             return await Mediator.Send(new GetActivityListReview.Query());
         }
         
-        // NEW: Get activities by specific year and/or month
+        // Get activities by specific year and/or month
         [HttpGet("byDate")]
         public async Task<ActionResult<List<Activity>>> GetActivitiesByDate([FromQuery] string? year, [FromQuery] string? month)
         {
@@ -42,6 +42,93 @@ namespace API.Controllers
             });
         }
 
+
+        // Get activities by specific year and/or month and Service Owner for Met SLA
+        [HttpGet("byDateServiceOwnerMetSLA")]
+        public async Task<ActionResult<string>> MetSLAByDate([FromQuery] string? year, [FromQuery] string? month, [FromQuery] string? ServiceOwner)
+        {
+            return await Mediator.Send(new MetSLAByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner = ServiceOwner
+            });
+        }
+        
+        
+        // Get activities by specific year and/or month and Service Owner for Extra Days after SLA
+        [HttpGet("byDateServiceOwnerExtraDaysAfterSLA")]
+        public async Task<ActionResult<string>> ExtraDaysAfterSLAByDate([FromQuery] string? year, [FromQuery] string? month ,[FromQuery] string? ServiceOwner  )
+        {
+            return await Mediator.Send(new ExtraDaysAfterSLAByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner =ServiceOwner 
+            });
+        }
+
+        // Get activities by specific year and/or month and Service Owner for priority
+        [HttpGet("byDateServiceOwnerPriority")]
+        public async Task<ActionResult<string>> PriorityByDate([FromQuery] string? year, [FromQuery] string? month ,[FromQuery] string? ServiceOwner  )
+        {
+            return await Mediator.Send(new PriorityByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner =ServiceOwner 
+            });
+        }
+
+        // Get activities by specific year and/or month and Service Owner for priority
+        [HttpGet("byDateServiceOwnerExtraNonFuntionalTeam")]
+        public async Task<ActionResult<string>> ExtraNonFuntionalTeamByDate([FromQuery] string? year, [FromQuery] string? month ,[FromQuery] string? ServiceOwner  )
+        {
+            return await Mediator.Send(new ExtraNonFuntionalTeamByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner =ServiceOwner 
+            });
+        }
+
+        // Get activities by specific year and/or month and Service Owner for checking responsibility of assigned team
+        [HttpGet("byDateServiceOwnerAssignedTeamResponsible")]
+        public async Task<ActionResult<string>> AssignedTeamResponsibleByDate([FromQuery] string? year, [FromQuery] string? month, [FromQuery] string? ServiceOwner)
+        {
+            return await Mediator.Send(new AssignedTeamResponsibleByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner = ServiceOwner
+            });
+        }
+
+
+        // Get activities by specific year and/or month and Service Owner for assigned team fixing issues
+        [HttpGet("byDateServiceOwnerAssignedTeamFixingIssues")]
+        public async Task<ActionResult<string>> AssignedTeamFixingIsssueByDate([FromQuery] string? year, [FromQuery] string? month, [FromQuery] string? ServiceOwner)
+        {
+            return await Mediator.Send(new AssignedTeamFixingIsssueByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner = ServiceOwner
+            });
+        }
+
+                // Get activities by specific year and/or month and Service Owner for assigned team fixing issues
+        [HttpGet("byDateServiceOwnerSystem")]
+        public async Task<ActionResult<string>> SystemByDate([FromQuery] string? year, [FromQuery] string? month, [FromQuery] string? ServiceOwner)
+        {
+            return await Mediator.Send(new SystemByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner = ServiceOwner
+            });
+        }
+        
         [HttpGet("id/{id}")]
         public async Task<ActionResult<Activity>> GetActivitiesDetails(string id)
         {
