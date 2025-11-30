@@ -117,11 +117,36 @@ namespace API.Controllers
             });
         }
 
-                // Get activities by specific year and/or month and Service Owner for assigned team fixing issues
+        // Get activities by specific year and/or month and Service Owner for assigned team fixing issues
         [HttpGet("byDateServiceOwnerSystem")]
         public async Task<ActionResult<string>> SystemByDate([FromQuery] string? year, [FromQuery] string? month, [FromQuery] string? ServiceOwner)
         {
             return await Mediator.Send(new SystemByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner = ServiceOwner
+            });
+        }
+        
+
+        // Get activities by specific year and/or month and Service Owner for issues
+        [HttpGet("byDateIssues")]
+        public async Task<ActionResult<string>> IssueByDate([FromQuery] string? year, [FromQuery] string? month, [FromQuery] string? ServiceOwner)
+        {
+            return await Mediator.Send(new IssueByDate.Query
+            {
+                Year = year,
+                Month = month,
+                ServiceOwner = ServiceOwner
+            });
+        }
+
+        // Get activities by specific year and/or month and Service Owner for duplicates
+        [HttpGet("byDateDuplicates")]
+        public async Task<ActionResult<string>> DuplicatesByDate([FromQuery] string? year, [FromQuery] string? month, [FromQuery] string? ServiceOwner)
+        {
+            return await Mediator.Send(new DuplicatesByDate.Query
             {
                 Year = year,
                 Month = month,
