@@ -1,73 +1,48 @@
-# Multi-stage Dockerfile for .NET 9 application with layered architecture
-# Stage 1: Build stage
+# Build stage
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-# Copy solution file (if exists) for better dependency resolution
-COPY *.sln ./
+# Copy everything
+COPY . .
 
-# Copy project files in the correct order to maintain project references
-# Copy API project (entry point)
-COPY API/API.csproj API/
-# Copy Application project (depends on Domain and Persistent)
-COPY Application/Application.csproj Application/
-# Copy Domain project (base layer)
-COPY Domain/Domain.csproj Domain/
-# Copy Persistent project (depends on Domain)
-COPY Persistent/Persistent.csproj Persistent/
+# Clean and restore
+RUN dotnet restore "ServiceNowTicketAutomation_Net.sln"
 
-# Restore NuGet packages for all projects
-# This layer is cached if project files don't change
-RUN dotnet restore
+# 安装 EF 工具
+RUN dotnet tool install --global dotnet-ef --version 9.0.10
+ENV PATH="$PATH:/root/.dotnet/tools"
 
-# Copy remaining source code for all projects
-COPY API/ API/
-COPY Application/ Application/
-COPY Domain/ Domain/
-COPY Persistent/ Persistent/
+# Build
+RUN dotnet build "ServiceNowTicketAutomation_Net.sln" -c Release --no-restore
 
-# Build and publish the API project (entry point)
-# This automatically builds all dependencies due to project references
-WORKDIR /src/API
-RUN dotnet publish "API.csproj" \
-    -c Release \
-    -o /app/publish \
-    --no-restore \
-    --verbosity minimal
+# 创建迁移
+RUN dotnet ef migrations add InitialCreate -p Persistent -s API --verbose
 
-# Stage 2: Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+# 应用迁移到 SQLite 数据库文件
+RUN mkdir -p /app/data && \
+    export ConnectionStrings__DefaultConnection="Data Source=/app/data/database.db" && \
+    dotnet ef database update -p Persistent -s API --verbose
 
-# Set working directory
+# Publish
+RUN dotnet publish "API/API.csproj" -c Release -o /app/publish
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
-
-# Expose port 8080
 EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
 
-# Set environment variables
-ENV ASPNETCORE_URLS=http://+:8080 \
-    DOTNET_RUNNING_IN_CONTAINER=true \
-    ASPNETCORE_ENVIRONMENT=Production
+# 创建数据目录
+RUN mkdir -p /app/data
 
-# Install curl for health checks
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create a non-root user for better security
-RUN groupadd --gid 1000 appgroup && \
-    useradd --uid 1000 --gid appgroup -m appuser
-
-# Copy published application from build stage
 COPY --from=build /app/publish .
 
-# Change ownership to non-root user
-RUN chown -R appuser:appgroup /app
+# 检查并复制数据库文件（如果有）
+RUN if [ -f /app/data/database.db ]; then \
+        echo "Copying database from build stage..."; \
+        cp /app/data/database.db .; \
+    else \
+        echo "No database file from build stage, will be created at runtime"; \
+    fi
 
-# Switch to non-root user
-USER appuser
-
-# Set entry point to run the application
-# API.dll is the compiled assembly from API.csproj
 ENTRYPOINT ["dotnet", "API.dll"]
