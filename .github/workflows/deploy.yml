@@ -94,7 +94,7 @@ jobs:
 
   # 3. 部署基础设施（第一次）
   deploy-infrastructure:
-    needs: sync-to-ecr
+    needs: build-push-to-ecr
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref_name == 'main'
     environment: ${{ github.event.inputs.environment || 'staging' }}
