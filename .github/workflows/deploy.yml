@@ -58,16 +58,19 @@ jobs:
           echo "Found images with tags ending in _servicenow:"
           echo "$matching_images"
               # Loop through each matching image tag and delete it
-          for tag in $matching_images; do
-            aws ecr-public batch-delete-image --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1 --image-ids imageTag="$tag"
-          done
+          # for tag in $matching_images; do
+          #   aws ecr-public batch-delete-image --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1 --image-ids imageTag="$tag"
+          # done
+         echo "images_exists=true" >> $GITHUB_ENV
          else
            echo "No images found with tags ending in _servicenow."
+           echo "images_exists=false" >> $GITHUB_ENV
         fi
         
     - name: Build, tag, and push image to Amazon ECR if an docker image does not exist
       env:
         IMAGE_TAG: ${{ github.sha }}_servicenow
+      if: env.images_exists == 'false'
       run: |
         docker build -t $IMAGE_TAG  .
         docker tag $IMAGE_TAG ${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
@@ -102,7 +105,7 @@ jobs:
     needs: build-push-to-ecr
     runs-on: ubuntu-latest
     environment: production 
-    
+
     steps:
 
     - name: Checkout repository
