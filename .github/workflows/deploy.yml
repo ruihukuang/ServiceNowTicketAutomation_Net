@@ -8,7 +8,7 @@ on:
       environment:
         description: 'Environment to deploy'
         required: true
-        default: 'staging'
+        default: 'main'
         type: choice
         options:
           - staging
