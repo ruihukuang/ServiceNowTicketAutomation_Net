@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ServiceNow API - GHCR to ECR to ECS via VPC Endpoint'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    Description: 'Environment name'
+  
+  GitHubUsername:
+    Type: String
+    Default: ruihukuang
+    Description: 'GitHub username for GHCR'
+  
+  GitHubRepo:
+    Type: String
+    Default: servicenowticketautomation_net
+    Description: 'GitHub repository name'
+  
+  DomainName:
+    Type: String
+    Default: api.servicenow-automation.com
+    Description: 'Custom domain for HTTPS'
+  
+  ContainerPort:
+    Type: Number
+    Default: 8080
+    Description: 'Container port'
+
+Resources:
+  # 1. VPC with isolated private subnets
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./vpc-isolated.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  # 2. ECR Repository for caching GHCR images
+  ECRStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./ecr-repository.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        RepositoryName: !Sub servicenow-${EnvironmentName}
+
+  # 3. ECS Cluster with VPC Endpoints
+  ECSClusterStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./ecs-cluster-vpce.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        PrivateSubnetIds: !GetAtt VPCStack.Outputs.PrivateSubnetIds
+
+  # 4. ALB with HTTPS
+  ALBStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./alb-https.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        PublicSubnetIds: !GetAtt VPCStack.Outputs.PublicSubnetIds
+        DomainName: !Ref DomainName
+        ContainerPort: !Ref ContainerPort
+
+  # 5. ECS Service in private subnet
+  ECSServiceStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: [ECRStack, ALBStack]
+    Properties:
+      TemplateURL: ./ecs-service-private.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        PrivateSubnetIds: !GetAtt VPCStack.Outputs.PrivateSubnetIds
+        ClusterName: !GetAtt ECSClusterStack.Outputs.ClusterName
+        TargetGroupArn: !GetAtt ALBStack.Outputs.TargetGroupArn
+        ECRRepositoryUri: !GetAtt ECRStack.Outputs.RepositoryUri
+        ContainerPort: !Ref ContainerPort
+        DesiredCount: 2
+        Cpu: '512'
+        Memory: '1024'
+
+Outputs:
+  ApiEndpoint:
+    Description: 'API HTTPS Endpoint'
+    Value: !GetAtt ALBStack.Outputs.ApiEndpoint
+  
+  ECRRepositoryUri:
+    Description: 'ECR Repository URI'
+    Value: !GetAtt ECRStack.Outputs.RepositoryUri
+  
+  ECRRepositoryName:
+    Description: 'ECR Repository Name'
+    Value: !GetAtt ECRStack.Outputs.RepositoryName
+  
+  ECSClusterName:
+    Description: 'ECS Cluster Name'
+    Value: !GetAtt ECSClusterStack.Outputs.ClusterName
+  
+  ECSServiceName:
+    Description: 'ECS Service Name'
+    Value: !GetAtt ECSServiceStack.Outputs.ServiceName
+  
+  GitHubSyncCommand:
+    Description: 'GitHub Actions sync command'
+    Value: !Sub |
+      aws ecr get-login-password --region ${AWS::Region} | \
+      docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com

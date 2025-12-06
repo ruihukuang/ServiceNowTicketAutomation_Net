@@ -1,0 +1,724 @@
+name: Sync GHCR to ECR and Deploy
+
+on:
+  push:
+    branches: [main, production]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: 'Docker image tag'
+        required: false
+        type: string
+
+env:
+  AWS_REGION: 'us-east-1'
+  ECR_REPOSITORY: 'servicenow'  # 基础名称，环境会自动添加
+
+jobs:
+  # 1. 构建并推送到 GHCR
+  build-and-push-ghcr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_sha: ${{ steps.build.outputs.image_sha }}
+      image_size: ${{ steps.build.outputs.image_size }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Build and push to GHCR
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}
+          ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }},push-by-digest=true
+    
+    - name: Test GHCR image
+      run: |
+        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}"
+        echo "Testing image: $IMAGE"
+        
+        docker run -d -p 8080:8080 --name test-app $IMAGE
+        sleep 20
+        
+        if curl -f http://localhost:8080/health; then
+          echo "✅ GHCR image test passed"
+          docker logs test-app --tail 5
+        else
+          echo "❌ GHCR image test failed"
+          docker logs test-app
+          exit 1
+        fi
+        
+        docker stop test-app && docker rm test-app
+
+  # 2. 同步到 ECR
+  sync-to-ecr:
+    needs: build-and-push-ghcr
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+    
+    steps:
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
+         aws-region: ${{ secrets.REGION }}
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Pull from GHCR and push to ECR
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+        ECR_REPO="${{ steps.login-ecr.outputs.registry }}/servicenow-$ENVIRONMENT"
+        GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}"
+        
+        echo "🔁 Syncing $GHCR_IMAGE to $ECR_REPO"
+        
+        # 从 GHCR 拉取
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        docker pull $GHCR_IMAGE
+        
+        # 打标签并推送到 ECR
+        docker tag $GHCR_IMAGE $ECR_REPO:${{ github.sha }}
+        docker tag $GHCR_IMAGE $ECR_REPO:latest
+        
+        docker push $ECR_REPO:${{ github.sha }}
+        docker push $ECR_REPO:latest
+        
+        echo "✅ Synced to ECR"
+        echo "ECR_IMAGE=$ECR_REPO:${{ github.sha }}" >> $GITHUB_ENV
+        echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
+
+    - name: Verify ECR image
+      run: |
+        echo "Verifying ECR image..."
+        docker pull ${{ env.ECR_IMAGE }}
+        
+        docker run -d -p 8081:8080 --name verify-ecr ${{ env.ECR_IMAGE }}
+        sleep 20
+        
+        if curl -f http://localhost:8081/health; then
+          echo "✅ ECR image verified"
+        else
+          echo "❌ ECR image verification failed"
+          docker logs verify-ecr
+          exit 1
+        fi
+        
+        docker stop verify-ecr && docker rm verify-ecr
+
+  # 3. 部署基础设施（第一次）
+  deploy-infrastructure:
+    needs: sync-to-ecr
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref_name == 'main'
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Deploy CloudFormation Stack
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || 'staging' }}
+        STACK_NAME="servicenow-$ENVIRONMENT"
+        
+        echo "🚀 Deploying infrastructure for $ENVIRONMENT..."
+        
+        aws cloudformation deploy \
+          --stack-name $STACK_NAME \
+          --template-file infrastructure/main.yaml \
+          --parameter-overrides \
+            EnvironmentName=$ENVIRONMENT \
+            GitHubUsername=${{ github.repository_owner }} \
+            GitHubRepo=${{ github.event.repository.name }} \
+            DomainName=api.$ENVIRONMENT.servicenow-automation.com \
+          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+          --region ${{ env.AWS_REGION }} \
+          --no-fail-on-empty-changeset
+        
+        # 等待栈创建完成
+        echo "⏳ Waiting for stack creation..."
+        aws cloudformation wait stack-create-complete \
+          --stack-name $STACK_NAME \
+          --region ${{ env.AWS_REGION }}
+        
+        echo "✅ Infrastructure deployed successfully!"
+
+  # 4. 更新 ECS 服务使用新镜像
+  update-ecs-service:
+    needs: [sync-to-ecr, deploy-infrastructure]
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+    
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Get CloudFormation outputs
+      id: cf-outputs
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+        STACK_NAME="servicenow-$ENVIRONMENT"
+        
+        echo "📋 Getting CloudFormation outputs..."
+        
+        # 获取栈输出
+        OUTPUTS=$(aws cloudformation describe-stacks \
+          --stack-name $STACK_NAME \
+          --query 'Stacks[0].Outputs' \
+          --region ${{ env.AWS_REGION }} \
+          --output json)
+        
+        # 提取关键输出
+        CLUSTER_NAME=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ECSClusterName").OutputValue')
+        SERVICE_NAME=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ECSServiceName").OutputValue')
+        ALB_DNS=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ALBDnsName").OutputValue')
+        
+        echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
+        echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+        echo "ALB_DNS=$ALB_DNS" >> $GITHUB_ENV
+        
+        echo "✅ Retrieved CloudFormation outputs:"
+        echo "   Cluster: $CLUSTER_NAME"
+        echo "   Service: $SERVICE_NAME"
+        echo "   ALB DNS: $ALB_DNS"
+    
+    - name: Update ECS service with new image
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+        
+        echo "🔄 Updating ECS service with new image..."
+        
+        # 方法1：直接更新服务（最简单）
+        aws ecs update-service \
+          --cluster ${{ env.CLUSTER_NAME }} \
+          --service ${{ env.SERVICE_NAME }} \
+          --force-new-deployment \
+          --region ${{ env.AWS_REGION }}
+        
+        echo "✅ ECS service update initiated"
+        
+        # 或者方法2：使用新任务定义（更精确控制）
+        # 获取当前任务定义
+        # TASK_DEF=$(aws ecs describe-task-definition \
+        #   --task-definition servicenow-$ENVIRONMENT-task \
+        #   --region ${{ env.AWS_REGION }} \
+        #   --query 'taskDefinition' \
+        #   --output json)
+        #
+        # 更新镜像并注册新任务定义
+        # ... 然后更新服务使用新任务定义
+    
+    - name: Wait for deployment to stabilize
+      run: |
+        echo "⏳ Waiting for ECS deployment to stabilize..."
+        
+        # 等待服务稳定
+        aws ecs wait services-stable \
+          --cluster ${{ env.CLUSTER_NAME }} \
+          --service ${{ env.SERVICE_NAME }} \
+          --region ${{ env.AWS_REGION }}
+        
+        echo "✅ ECS service stabilized"
+        
+        # 获取部署状态
+        SERVICE_INFO=$(aws ecs describe-services \
+          --cluster ${{ env.CLUSTER_NAME }} \
+          --services ${{ env.SERVICE_NAME }} \
+          --region ${{ env.AWS_REGION }} \
+          --query 'services[0]')
+        
+        DESIRED_COUNT=$(echo $SERVICE_INFO | jq -r '.desiredCount')
+        RUNNING_COUNT=$(echo $SERVICE_INFO | jq -r '.runningCount')
+        DEPLOYMENTS=$(echo $SERVICE_INFO | jq -r '.deployments | length')
+        
+        echo "📊 Deployment Status:"
+        echo "   Desired tasks: $DESIRED_COUNT"
+        echo "   Running tasks: $RUNNING_COUNT"
+        echo "   Active deployments: $DEPLOYMENTS"
+
+  # 5. 验证部署
+  verify-deployment:
+    needs: update-ecs-service
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+    
+    steps:
+    - name: Wait for ALB to propagate
+      run: |
+        echo "⏳ Waiting for ALB DNS to propagate and health checks to pass..."
+        sleep 60
+        echo "✅ Wait complete"
+    
+    - name: Test deployment via ALB
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+        
+        # 如果 ALB_DNS 没有设置，尝试获取
+        if [ -z "${{ env.ALB_DNS }}" ]; then
+          echo "Retrieving ALB DNS..."
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --query "LoadBalancers[?contains(LoadBalancerName, '$ENVIRONMENT')].DNSName" \
+            --region ${{ env.AWS_REGION }} \
+            --output text | head -1)
+        else
+          ALB_DNS="${{ env.ALB_DNS }}"
+        fi
+        
+        echo "🔍 Testing deployment via ALB: $ALB_DNS"
+        
+        # 测试健康端点
+        MAX_ATTEMPTS=10
+        ATTEMPT=1
+        SUCCESS=false
+        
+        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+          echo "Attempt $ATTEMPT/$MAX_ATTEMPTS..."
+          
+          # 使用 curl 测试 HTTPS 端点
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" "https://$ALB_DNS/health" --max-time 30 2>/dev/null || echo "HTTP_STATUS:000")
+          STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+          
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Health check passed: HTTP 200"
+            SUCCESS=true
+            
+            # 测试其他端点
+            echo "Testing additional endpoints..."
+            
+            # 根端点
+            ROOT_RESPONSE=$(curl -s "https://$ALB_DNS/" --max-time 10 2>/dev/null || echo "No response")
+            if [ -n "$ROOT_RESPONSE" ] && [ "$ROOT_RESPONSE" != "No response" ]; then
+              echo "✅ Root endpoint responded"
+            fi
+            
+            # API 信息端点
+            API_RESPONSE=$(curl -s "https://$ALB_DNS/api/info" --max-time 10 2>/dev/null || echo "No response")
+            if [ -n "$API_RESPONSE" ] && [ "$API_RESPONSE" != "No response" ]; then
+              echo "✅ API info endpoint responded"
+            fi
+            
+            break
+          else
+            echo "⏳ Health check: HTTP $STATUS"
+            sleep 15
+            ATTEMPT=$((ATTEMPT + 1))
+          fi
+        done
+        
+        if [ "$SUCCESS" = false ]; then
+          echo "❌ Deployment verification failed after $MAX_ATTEMPTS attempts"
+          
+          # 获取 ECS 任务信息帮助调试
+          echo "Fetching ECS task details for debugging..."
+          
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster ${{ env.CLUSTER_NAME }} \
+            --service ${{ env.SERVICE_NAME }} \
+            --query 'taskArns[0]' \
+            --region ${{ env.AWS_REGION }} \
+            --output text)
+          
+          if [ -n "$TASK_ARN" ] && [ "$TASK_ARN" != "None" ]; then
+            echo "📋 Task ARN: $TASK_ARN"
+            
+            # 获取任务状态
+            TASK_STATUS=$(aws ecs describe-tasks \
+              --cluster ${{ env.CLUSTER_NAME }} \
+              --tasks $TASK_ARN \
+              --region ${{ env.AWS_REGION }} \
+              --query 'tasks[0].lastStatus' \
+              --output text)
+            
+            echo "📊 Task Status: $TASK_STATUS"
+            
+            # 获取停止原因（如果任务失败）
+            STOP_REASON=$(aws ecs describe-tasks \
+              --cluster ${{ env.CLUSTER_NAME }} \
+              --tasks $TASK_ARN \
+              --region ${{ env.AWS_REGION }} \
+              --query 'tasks[0].stoppedReason' \
+              --output text 2>/dev/null || echo "N/A")
+            
+            if [ -n "$STOP_REASON" ] && [ "$STOP_REASON" != "None" ]; then
+              echo "⚠️ Stop Reason: $STOP_REASON"
+            fi
+          fi
+          
+          # 检查 ALB 目标组健康状态
+          echo "Checking ALB target group health..."
+          
+          TG_ARN=$(aws elbv2 describe-target-groups \
+            --query "TargetGroups[?contains(TargetGroupName, '$ENVIRONMENT')].TargetGroupArn" \
+            --region ${{ env.AWS_REGION }} \
+            --output text | head -1)
+          
+          if [ -n "$TG_ARN" ]; then
+            TG_HEALTH=$(aws elbv2 describe-target-health \
+              --target-group-arn $TG_ARN \
+              --region ${{ env.AWS_REGION }} \
+              --query 'TargetHealthDescriptions[].TargetHealth.State' \
+              --output json 2>/dev/null || echo "[]")
+            
+            echo "🎯 Target Group Health States:"
+            echo $TG_HEALTH | jq -r '.[]'
+          fi
+          
+          exit 1
+        fi
+    
+    - name: Run comprehensive tests
+      run: |
+        ALB_DNS="${{ env.ALB_DNS }}"
+        if [ -z "$ALB_DNS" ]; then
+          ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --query "LoadBalancers[?contains(LoadBalancerName, '$ENVIRONMENT')].DNSName" \
+            --region ${{ env.AWS_REGION }} \
+            --output text | head -1)
+        fi
+        
+        echo "🧪 Running comprehensive API tests..."
+        
+        # 测试多个端点
+        ENDPOINTS=(
+          "/"
+          "/health"
+          "/api/info"
+        )
+        
+        ALL_PASSED=true
+        
+        for endpoint in "${ENDPOINTS[@]}"; do
+          URL="https://$ALB_DNS$endpoint"
+          echo ""
+          echo "Testing: $URL"
+          
+          # 使用超时和重试
+          for i in {1..3}; do
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME:%{time_total}" \
+              "$URL" \
+              --max-time 30 \
+              --retry 2 \
+              --retry-delay 1 \
+              2>/dev/null || echo -e "\nHTTP_STATUS:000\nTIME:0")
+            
+            STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+            TIME=$(echo "$RESPONSE" | grep "TIME:" | cut -d':' -f2)
+            BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d' | sed '/TIME:/d')
+            
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "204" ]; then
+              echo "✅ $endpoint: HTTP $STATUS (${TIME}s)"
+              if [ -n "$BODY" ]; then
+                echo "   Response: $(echo "$BODY" | head -c 100)..."
+              fi
+              break
+            elif [ $i -eq 3 ]; then
+              echo "❌ $endpoint: Failed after 3 attempts (HTTP $STATUS)"
+              ALL_PASSED=false
+            else
+              echo "⚠️ $endpoint: Attempt $i failed (HTTP $STATUS), retrying..."
+              sleep 2
+            fi
+          done
+        done
+        
+        if [ "$ALL_PASSED" = true ]; then
+          echo ""
+          echo "🎉 All API tests passed!"
+        else
+          echo ""
+          echo "⚠️ Some API tests failed"
+        fi
+
+  # 6. 清理和通知
+  cleanup-and-notify:
+    runs-on: ubuntu-latest
+    needs: [verify-deployment, deploy-infrastructure, sync-to-ecr]
+    if: always()
+    
+    steps:
+    - name: Create deployment summary
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+        DEPLOYMENT_STATUS="${{ needs.verify-deployment.result }}"
+        CURRENT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+        
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### 📊 Deployment Details" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment**: \`$ENVIRONMENT\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status**: $([ \"$DEPLOYMENT_STATUS\" = \"success\" ] && echo \"✅ Success\" || echo \"❌ Failed\")" >> $GITHUB_STEP_SUMMARY
+        echo "- **Timestamp**: $CURRENT_TIME" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Workflow**: [${{ github.workflow }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### 📦 Image Information" >> $GITHUB_STEP_SUMMARY
+        echo "- **Source**: GHCR" >> $GITHUB_STEP_SUMMARY
+        echo "- **GHCR Image**: \`ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **ECR Image**: \`${{ needs.sync-to-ecr.outputs.ecr_image_uri || 'N/A' }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "$DEPLOYMENT_STATUS" = "success" ]; then
+          echo "### 🔗 Access URLs" >> $GITHUB_STEP_SUMMARY
+          
+          # 尝试获取 ALB DNS
+          if [ -n "${{ env.ALB_DNS }}" ]; then
+            ALB_DNS="${{ env.ALB_DNS }}"
+          else
+            # 尝试从 AWS 获取
+            ALB_DNS=$(aws elbv2 describe-load-balancers \
+              --query "LoadBalancers[?contains(LoadBalancerName, '$ENVIRONMENT')].DNSName" \
+              --region ${{ env.AWS_REGION }} \
+              --output text 2>/dev/null | head -1 || echo "Not available")
+          fi
+          
+          if [ -n "$ALB_DNS" ] && [ "$ALB_DNS" != "Not available" ]; then
+            echo "- **API Endpoint**: [https://$ALB_DNS](https://$ALB_DNS)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Health Check**: [https://$ALB_DNS/health](https://$ALB_DNS/health)" >> $GITHUB_STEP_SUMMARY
+            echo "- **API Info**: [https://$ALB_DNS/api/info](https://$ALB_DNS/api/info)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **API Endpoint**: Not available yet" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 🏗️ Infrastructure" >> $GITHUB_STEP_SUMMARY
+          echo "- **ECS Cluster**: \`${{ env.CLUSTER_NAME || 'N/A' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **ECS Service**: \`${{ env.SERVICE_NAME || 'N/A' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **CloudFormation Stack**: \`servicenow-$ENVIRONMENT\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📈 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Monitor application logs in CloudWatch" >> $GITHUB_STEP_SUMMARY
+          echo "2. Check ECS service metrics in AWS Console" >> $GITHUB_STEP_SUMMARY
+          echo "3. Set up alerts for service health" >> $GITHUB_STEP_SUMMARY
+          echo "4. Configure auto-scaling if needed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "🎉 **Deployment successful!** The application is now live and serving traffic." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Possible issues:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. CloudFormation stack deployment failed" >> $GITHUB_STEP_SUMMARY
+          echo "2. ECS task failed to start" >> $GITHUB_STEP_SUMMARY
+          echo "3. ALB health checks failing" >> $GITHUB_STEP_SUMMARY
+          echo "4. Network connectivity issues" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Troubleshooting steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check CloudFormation stack events" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review ECS task logs in CloudWatch" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify ALB target group health" >> $GITHUB_STEP_SUMMARY
+          echo "4. Check security group configurations" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Please check the logs above for detailed error messages.**" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "*Deployment completed at $CURRENT_TIME*" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Send Slack notification (optional)
+      if: always()
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+        if [ -n "$SLACK_WEBHOOK_URL" ]; then
+          ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+          DEPLOYMENT_STATUS="${{ needs.verify-deployment.result }}"
+          COMMIT_LINK="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          WORKFLOW_LINK="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          if [ "$DEPLOYMENT_STATUS" = "success" ]; then
+            EMOJI="🚀"
+            COLOR="good"
+            TITLE="Deployment Successful"
+            MESSAGE="Successfully deployed to *$ENVIRONMENT*"
+          else
+            EMOJI="⚠️"
+            COLOR="danger"
+            TITLE="Deployment Failed"
+            MESSAGE="Failed to deploy to *$ENVIRONMENT*"
+          fi
+          
+          PAYLOAD=$(cat << EOF
+          {
+            "attachments": [
+              {
+                "color": "$COLOR",
+                "title": "$EMOJI $TITLE",
+                "fields": [
+                  {
+                    "title": "Environment",
+                    "value": "$ENVIRONMENT",
+                    "short": true
+                  },
+                  {
+                    "title": "Status",
+                    "value": "$DEPLOYMENT_STATUS",
+                    "short": true
+                  },
+                  {
+                    "title": "Commit",
+                    "value": "<$COMMIT_LINK|${GITHUB_SHA:0:7}>",
+                    "short": true
+                  },
+                  {
+                    "title": "Triggered by",
+                    "value": "${{ github.actor }}",
+                    "short": true
+                  }
+                ],
+                "footer": "GitHub Actions",
+                "ts": $(date +%s),
+                "actions": [
+                  {
+                    "type": "button",
+                    "text": "View Workflow",
+                    "url": "$WORKFLOW_LINK",
+                    "style": "primary"
+                  },
+                  {
+                    "type": "button",
+                    "text": "View Commit",
+                    "url": "$COMMIT_LINK"
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          )
+          
+          curl -X POST -H 'Content-type: application/json' --data "$PAYLOAD" $SLACK_WEBHOOK_URL
+          echo "Slack notification sent"
+        else
+          echo "Slack webhook not configured, skipping notification"
+        fi
+    
+    - name: Clean up Docker images
+      if: always()
+      run: |
+        echo "🧹 Cleaning up Docker images..."
+        
+        # 删除测试容器（如果存在）
+        docker rm -f test-app verify-ecr 2>/dev/null || true
+        
+        # 清理未使用的镜像
+        docker image prune -a -f
+        
+        echo "✅ Cleanup complete"
+
+# 7. 回滚作业（手动触发）
+  rollback:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'rollback'
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Rollback to previous task definition
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || 'production' }}
+        
+        echo "🔙 Rolling back ECS service in $ENVIRONMENT..."
+        
+        # 获取当前服务信息
+        CLUSTER_NAME="servicenow-$ENVIRONMENT-cluster"
+        SERVICE_NAME="servicenow-$ENVIRONMENT-service"
+        
+        # 获取先前的任务定义
+        PREVIOUS_TASK_DEF=$(aws ecs describe-services \
+          --cluster $CLUSTER_NAME \
+          --services $SERVICE_NAME \
+          --region ${{ env.AWS_REGION }} \
+          --query 'services[0].deployments[?status==\"PRIMARY\"].taskDefinition' \
+          --output text)
+        
+        if [ -n "$PREVIOUS_TASK_DEF" ]; then
+          echo "Rolling back to: $PREVIOUS_TASK_DEF"
+          
+          # 更新服务使用先前的任务定义
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $SERVICE_NAME \
+            --task-definition $PREVIOUS_TASK_DEF \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "✅ Rollback initiated"
+        else
+          echo "❌ No previous task definition found for rollback"
+          exit 1
+        fi
+    
+    - name: Wait for rollback to complete
+      run: |
+        ENVIRONMENT=${{ github.event.inputs.environment || 'production' }}
+        CLUSTER_NAME="servicenow-$ENVIRONMENT-cluster"
+        SERVICE_NAME="servicenow-$ENVIRONMENT-service"
+        
+        echo "⏳ Waiting for rollback to stabilize..."
+        aws ecs wait services-stable \
+          --cluster $CLUSTER_NAME \
+          --service $SERVICE_NAME \
+          --region ${{ env.AWS_REGION }}
+        
+        echo "✅ Rollback completed successfully"
