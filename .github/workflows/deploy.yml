@@ -14,117 +14,133 @@ on:
           - staging
           - production
       image_tag:
-        description: 'Docker image tag'
+        description: 'Docker image tag (default: git SHA)'
         required: false
+        type: string
+      ghcr_package_name:
+        description: 'GHCR Package name'
+        required: false
+        default: 'servicenowticketautomation_net'
         type: string
 
 permissions:
   id-token: write   # This is required for requesting the JWT
   contents: read 
+  packages: read    # Required for pulling from GHCR
   
 env:
   AWS_REGION: 'us-east-1'
-  ECR_REPOSITORY: 'servicenow'  # 基础名称，环境会自动添加
+  ECR_REPOSITORY: 'servicenow'
 
 jobs:
-  # 1. 构建并推送到 GHCR
-  build-and-push-ghcr:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image_sha: ${{ steps.build.outputs.image_sha }}
-      image_size: ${{ steps.build.outputs.image_size }}
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Build and push to GHCR
-      id: build
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: |
-          ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}
-          ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest
-        labels: |
-          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          org.opencontainers.image.revision=${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }},push-by-digest=true
-    
-    - name: Test GHCR image
-      run: |
-        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}"
-        echo "Testing image: $IMAGE"
-        
-        docker run -d -p 8080:8080 --name test-app $IMAGE
-        sleep 20
-        
-        if curl -f http://localhost:8080/health; then
-          echo "✅ GHCR image test passed"
-          docker logs test-app --tail 5
-        else
-          echo "❌ GHCR image test failed"
-          docker logs test-app
-          exit 1
-        fi
-        
-        docker stop test-app && docker rm test-app
-
-  # 2. 同步到 ECR
+  # 1. 从 GHCR Package 同步到 ECR
   sync-to-ecr:
-    needs: build-and-push-ghcr
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
     
     steps:
+    - name: Set up variables
+      id: setup-vars
+      run: |
+        # 设置环境
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+        elif [ "${{ github.ref_name }}" = "main" ]; then
+          ENVIRONMENT="staging"
+        else
+          ENVIRONMENT="production"
+        fi
+        
+        # 设置镜像标签
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.image_tag }}" ]; then
+          IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        else
+          IMAGE_TAG="${{ github.sha }}"
+        fi
+        
+        # 设置 GHCR package 名称
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.ghcr_package_name }}" ]; then
+          PACKAGE_NAME="${{ github.event.inputs.ghcr_package_name }}"
+        else
+          PACKAGE_NAME="servicenowticketautomation_net"
+        fi
+        
+        echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+        echo "ghcr_image=ghcr.io/${{ github.repository_owner }}/$PACKAGE_NAME:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "ghcr_image_latest=ghcr.io/${{ github.repository_owner }}/$PACKAGE_NAME:latest" >> $GITHUB_OUTPUT
+    
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v4
       with:
-         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
-         aws-region: ${{ secrets.REGION }}
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
+        aws-region: ${{ env.AWS_REGION }}
+        role-session-name: GitHubActions-${{ github.run_id }}
     
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
+      with:
+        mask-password: 'true'
     
     - name: Pull from GHCR and push to ECR
+      id: sync-image
       run: |
-        ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+        ENVIRONMENT="${{ steps.setup-vars.outputs.environment }}"
         ECR_REPO="${{ steps.login-ecr.outputs.registry }}/servicenow-$ENVIRONMENT"
-        GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}"
+        GHCR_IMAGE="${{ steps.setup-vars.outputs.ghcr_image }}"
+        GHCR_IMAGE_LATEST="${{ steps.setup-vars.outputs.ghcr_image_latest }}"
         
-        echo "🔁 Syncing $GHCR_IMAGE to $ECR_REPO"
+        echo "🔁 Syncing from GHCR to ECR"
+        echo "Source: $GHCR_IMAGE"
+        echo "Target: $ECR_REPO"
+        echo "Package: ${{ steps.setup-vars.outputs.package_name }}"
         
-        # 从 GHCR 拉取
+        # 登录到 GHCR
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        docker pull $GHCR_IMAGE
+        
+        # 尝试拉取指定标签的镜像
+        echo "Pulling specific tag from GHCR: $GHCR_IMAGE"
+        if docker pull $GHCR_IMAGE; then
+          echo "✅ Successfully pulled $GHCR_IMAGE"
+          SOURCE_IMAGE=$GHCR_IMAGE
+        else
+          echo "⚠️ Failed to pull $GHCR_IMAGE, trying latest tag..."
+          # 尝试拉取 latest 标签
+          if docker pull $GHCR_IMAGE_LATEST; then
+            echo "✅ Successfully pulled $GHCR_IMAGE_LATEST"
+            SOURCE_IMAGE=$GHCR_IMAGE_LATEST
+          else
+            echo "❌ Failed to pull image from GHCR"
+            echo "Available tags for ghcr.io/${{ github.repository_owner }}/${{ steps.setup-vars.outputs.package_name }}:"
+            
+            # 尝试列出可用标签（需要适当的权限）
+            curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/users/${{ github.repository_owner }}/packages/container/${{ steps.setup-vars.outputs.package_name }}/versions" \
+              | jq -r '.[].metadata.container.tags[]' 2>/dev/null || echo "Could not list tags"
+            
+            exit 1
+          fi
+        fi
         
         # 打标签并推送到 ECR
-        docker tag $GHCR_IMAGE $ECR_REPO:${{ github.sha }}
-        docker tag $GHCR_IMAGE $ECR_REPO:latest
+        echo "Tagging image for ECR..."
+        docker tag $SOURCE_IMAGE $ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}
+        docker tag $SOURCE_IMAGE $ECR_REPO:latest
         
-        docker push $ECR_REPO:${{ github.sha }}
+        echo "Pushing to ECR..."
+        docker push $ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}
         docker push $ECR_REPO:latest
         
-        echo "✅ Synced to ECR"
-        echo "ECR_IMAGE=$ECR_REPO:${{ github.sha }}" >> $GITHUB_ENV
+        echo "✅ Successfully synced to ECR"
+        echo "ECR_IMAGE=$ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}" >> $GITHUB_ENV
         echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
+        echo "SOURCE_IMAGE=$SOURCE_IMAGE" >> $GITHUB_ENV
+        
+        # 输出供后续步骤使用
+        echo "ecr_image=$ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}" >> $GITHUB_OUTPUT
+        echo "ecr_repo=$ECR_REPO" >> $GITHUB_OUTPUT
 
     - name: Verify ECR image
       run: |
