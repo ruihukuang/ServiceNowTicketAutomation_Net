@@ -139,7 +139,7 @@ jobs:
 
   # 4. 更新 ECS 服务使用新镜像
   update-ecs-service:
-    needs: [sync-to-ecr, deploy-infrastructure]
+    needs: [build-push-to-ecr, deploy-infrastructure]
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
     
@@ -431,7 +431,7 @@ jobs:
   # 6. 清理和通知
   cleanup-and-notify:
     runs-on: ubuntu-latest
-    needs: [verify-deployment, deploy-infrastructure, sync-to-ecr]
+    needs: [verify-deployment, deploy-infrastructure, build-push-to-ecr]
     if: always()
     
     steps:
