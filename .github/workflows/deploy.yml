@@ -75,12 +75,30 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
         aws-region: ${{ secrets.REGION }}
+
+    - name: Create ECR repository if needed
+      run: |
+      ENVIRONMENT="${{ steps.setup-vars.outputs.environment }}"
+      REPO_NAME="servicenow-$ENVIRONMENT"
+    
+      # Check if repository exists, create if it doesn't
+      if aws ecr describe-repositories --repository-names "$REPO_NAME" >/dev/null 2>&1; then
+         echo "✅ ECR repository $REPO_NAME already exists"
+      else
+        echo "🛠️ Creating ECR repository $REPO_NAME"
+        aws ecr create-repository \
+        --repository-name "$REPO_NAME" \
+        --image-tag-mutability MUTABLE \
+        --image-scanning-configuration scanOnPush=true
+      
+        echo "✅ Created ECR repository $REPO_NAME"
+      fi
     
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
       with:
-        mask-password: 'true'
+        mask-password: 'true' 
     
     - name: Pull from GHCR and push to ECR
       id: sync-image
