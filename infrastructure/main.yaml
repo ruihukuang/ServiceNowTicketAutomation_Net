@@ -1,21 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'ServiceNow API - GHCR to ECR to ECS via VPC Endpoint'
+Description: 'ServiceNow API - ECR to ECS via VPC Endpoint'
 
 Parameters:
   EnvironmentName:
     Type: String
     Default: production
     Description: 'Environment name'
-  
-  GitHubUsername:
-    Type: String
-    Default: ruihukuang
-    Description: 'GitHub username for GHCR'
-  
-  GitHubRepo:
-    Type: String
-    Default: servicenowticketautomation_net
-    Description: 'GitHub repository name'
   
   DomainName:
     Type: String
@@ -36,16 +26,7 @@ Resources:
       Parameters:
         EnvironmentName: !Ref EnvironmentName
 
-  # 2. ECR Repository for caching GHCR images
-  ECRStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./ecr-repository.yaml
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
-        RepositoryName:  servicenow_repo
-
-  # 3. ECS Cluster with VPC Endpoints
+# 2. ECS Cluster with VPC Endpoints
   ECSClusterStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -70,7 +51,7 @@ Resources:
   # 5. ECS Service in private subnet
   ECSServiceStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: [ECRStack, ALBStack]
+    DependsOn: [ ALBStack]
     Properties:
       TemplateURL: ./ecs-service-private.yaml
       Parameters:
@@ -79,7 +60,7 @@ Resources:
         PrivateSubnetIds: !GetAtt VPCStack.Outputs.PrivateSubnetIds
         ClusterName: !GetAtt ECSClusterStack.Outputs.ClusterName
         TargetGroupArn: !GetAtt ALBStack.Outputs.TargetGroupArn
-        ECRRepositoryUri: !GetAtt ECRStack.Outputs.RepositoryUri
+        ECRRepositoryUri: public.ecr.aws/g1n7j8p0/servicenow_repo
         ContainerPort: !Ref ContainerPort
         DesiredCount: 2
         Cpu: '512'
@@ -90,14 +71,6 @@ Outputs:
     Description: 'API HTTPS Endpoint'
     Value: !GetAtt ALBStack.Outputs.ApiEndpoint
   
-  ECRRepositoryUri:
-    Description: 'ECR Repository URI'
-    Value: !GetAtt ECRStack.Outputs.RepositoryUri
-  
-  ECRRepositoryName:
-    Description: 'ECR Repository Name'
-    Value: !GetAtt ECRStack.Outputs.RepositoryName
-  
   ECSClusterName:
     Description: 'ECS Cluster Name'
     Value: !GetAtt ECSClusterStack.Outputs.ClusterName
@@ -106,8 +79,3 @@ Outputs:
     Description: 'ECS Service Name'
     Value: !GetAtt ECSServiceStack.Outputs.ServiceName
   
-  GitHubSyncCommand:
-    Description: 'GitHub Actions sync command'
-    Value: !Sub |
-      aws ecr get-login-password --region ${AWS::Region} | \
-      docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
