@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  setup-uv-git-repo-pacakages:
+  Test-AWS-Login:
     runs-on: ubuntu-latest
 
     steps:
