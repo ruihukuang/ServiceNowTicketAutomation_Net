@@ -113,6 +113,9 @@ jobs:
     needs: build-push-to-ecr
     runs-on: ubuntu-latest
     environment: production 
+    permissions:
+      id-token: write  # REQUIRED: to request JWT from GitHub OIDC provider
+      contents: read   # OPTIONAL: if you need to checkout code
 
     steps:
 
