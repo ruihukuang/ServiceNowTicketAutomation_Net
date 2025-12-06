@@ -18,6 +18,10 @@ on:
         required: false
         type: string
 
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read 
+  
 env:
   AWS_REGION: 'us-east-1'
   ECR_REPOSITORY: 'servicenow'  # 基础名称，环境会自动添加
