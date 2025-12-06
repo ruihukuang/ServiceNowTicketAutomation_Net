@@ -85,9 +85,9 @@ jobs:
 
     - name: Verify ECR image
       env:
-      ECR_REGISTRY: public.ecr.aws/g1n7j8p0  # Your public ECR registry
-      ECR_REPOSITORY: servicenow_repo  # Your repository name
-      IMAGE_TAG: ${{ github.sha }}_servicenow  # Your tag format
+        ECR_REGISTRY: public.ecr.aws/g1n7j8p0  # Your public ECR registry
+        ECR_REPOSITORY: servicenow_repo  # Your repository name
+        IMAGE_TAG: ${{ github.sha }}_servicenow  # Your tag format
       run: |
         echo "🔄 Logging into Public ECR..."
         aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
