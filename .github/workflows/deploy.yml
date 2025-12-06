@@ -12,7 +12,7 @@ permissions:
 env:
   ECR_REGISTRY: public.ecr.aws
   ECR_REPOSITORY: ${{ secrets.RESPOSITORY_NAME }} 
-  REGION: ${{ secrets.AWS_REGION }}
+
   
 
 jobs:
