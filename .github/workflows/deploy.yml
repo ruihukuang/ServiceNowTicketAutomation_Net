@@ -8,36 +8,18 @@ permissions:
   id-token: write   # This is required for requesting the JWT
   contents: read 
   packages: read    # Required for pulling from GHCR
+
+env:
+  ECR_REGISTRY: public.ecr.aws
+  ECR_REPOSITORY: ${{ secrets.RESPOSITORY_NAME }} 
+  REGION: ${{ secrets.AWS_REGION }}
   
 
 jobs:
-  # 1. 从 GHCR Package 同步到 ECR
-  sync-to-ecr:
+  build-push-to-ecr:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
     
     steps:
-    - name: Set up variables
-      id: setup-vars
-      run: |
-        # 设置环境
-        ENVIRONMENT="production"
-
-        
-        # 设置镜像标签
-        IMAGE_TAG="${{ github.sha }}"
-
-        
-        # 设置 GHCR package 名称
-        PACKAGE_NAME="servicenowticketautomation_net"
-
-        
-        echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
-        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
-        echo "ghcr_image=ghcr.io/${{ github.repository_owner }}/$PACKAGE_NAME:$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "ghcr_image_latest=ghcr.io/${{ github.repository_owner }}/$PACKAGE_NAME:latest" >> $GITHUB_OUTPUT
-   
     - name: Checkout repository
       uses: actions/checkout@v2
     
@@ -46,95 +28,58 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
         aws-region: ${{ secrets.REGION }}
+    
+    - name: Log in to Amazon ECR
+      run: |
+        docker logout public.ecr.aws
+        aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
-    - name: Create ECR repository if needed
+    - name: Check if ECR Repository Exists
+      id: check_repo
       run: |
-         ENVIRONMENT="${{ steps.setup-vars.outputs.environment }}"
-         REPO_NAME="servicenow-$ENVIRONMENT"
-    
-         # Check if repository exists, create if it doesn't
-         if aws ecr describe-repositories --repository-names "$REPO_NAME" >/dev/null 2>&1; then
-            echo "✅ ECR repository $REPO_NAME already exists"
-         else
-            echo "🛠️ Creating ECR repository $REPO_NAME"
-            aws ecr create-repository \
-            --repository-name "$REPO_NAME" \
-            --image-tag-mutability MUTABLE \
-            --image-scanning-configuration scanOnPush=true
-      
-            echo "✅ Created ECR repository $REPO_NAME"
-          fi
-    
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-      with:
-        mask-password: 'true' 
-    
-    - name: Pull from GHCR and push to ECR
-      id: sync-image
-      run: |
-        ENVIRONMENT="${{ steps.setup-vars.outputs.environment }}"
-        ECR_REPO="${{ steps.login-ecr.outputs.registry }}/servicenow-$ENVIRONMENT"
-        GHCR_IMAGE="${{ steps.setup-vars.outputs.ghcr_image }}"
-        GHCR_IMAGE_LATEST="${{ steps.setup-vars.outputs.ghcr_image_latest }}"
-        
-        echo "🔁 Syncing from GHCR to ECR"
-        echo "Source: $GHCR_IMAGE"
-        echo "Target: $ECR_REPO"
-        echo "Package: ${{ steps.setup-vars.outputs.package_name }}"
-        
-        # 登录到 GHCR
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        
-        # 尝试拉取指定标签的镜像
-        echo "Pulling specific tag from GHCR: $GHCR_IMAGE"
-        if docker pull $GHCR_IMAGE; then
-          echo "✅ Successfully pulled $GHCR_IMAGE"
-          SOURCE_IMAGE=$GHCR_IMAGE
+        if aws ecr-public describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region us-east-1 ; then
+          echo "repository_exists=true" >> $GITHUB_ENV
         else
-          echo "⚠️ Failed to pull $GHCR_IMAGE, trying latest tag..."
-          # 尝试拉取 latest 标签
-          if docker pull $GHCR_IMAGE_LATEST; then
-            echo "✅ Successfully pulled $GHCR_IMAGE_LATEST"
-            SOURCE_IMAGE=$GHCR_IMAGE_LATEST
-          else
-            echo "❌ Failed to pull image from GHCR"
-            echo "Available tags for ghcr.io/${{ github.repository_owner }}/${{ steps.setup-vars.outputs.package_name }}:"
-            
-            # 尝试列出可用标签（需要适当的权限）
-            curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/users/${{ github.repository_owner }}/packages/container/${{ steps.setup-vars.outputs.package_name }}/versions" \
-              | jq -r '.[].metadata.container.tags[]' 2>/dev/null || echo "Could not list tags"
-            
-            exit 1
-          fi
+          echo "repository_exists=false" >> $GITHUB_ENV
         fi
         
-        # 打标签并推送到 ECR
-        echo "Tagging image for ECR..."
-        docker tag $SOURCE_IMAGE $ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}
-        docker tag $SOURCE_IMAGE $ECR_REPO:latest
+    - name: Create a Public ECR Repository for Model Artifacts if it does not exist
+      if: env.repository_exists == 'false'
+      run: |
+        aws ecr-public create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1
+    
+    - name: check if an docker image  exists and act accordingly
+      run: |
+        output=$(aws ecr-public describe-images --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1 )
+        matching_images=$(echo "$output" | jq -r '.imageDetails[].imageTags[] | select(endswith("_servicenow"))')
+
+        # Check if any matching images were found
+        if [ -n "$matching_images" ]; then
+          echo "Found images with tags ending in _servicenow:"
+          echo "$matching_images"
+              # Loop through each matching image tag and delete it
+          for tag in $matching_images; do
+            aws ecr-public batch-delete-image --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1 --image-ids imageTag="$tag"
+          done
+         else
+           echo "No images found with tags ending in _servicenow."
+        fi
         
-        echo "Pushing to ECR..."
-        docker push $ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}
-        docker push $ECR_REPO:latest
-        
-        echo "✅ Successfully synced to ECR"
-        echo "ECR_IMAGE=$ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}" >> $GITHUB_ENV
-        echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
-        echo "SOURCE_IMAGE=$SOURCE_IMAGE" >> $GITHUB_ENV
-        
-        # 输出供后续步骤使用
-        echo "ecr_image=$ECR_REPO:${{ steps.setup-vars.outputs.image_tag }}" >> $GITHUB_OUTPUT
-        echo "ecr_repo=$ECR_REPO" >> $GITHUB_OUTPUT
+    - name: Build, tag, and push image to Amazon ECR if an docker image does not exist
+      env:
+        IMAGE_TAG: ${{ github.sha }}_servicenow
+      run: |
+        docker build -t $IMAGE_TAG  .
+        docker tag $IMAGE_TAG ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+        docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
 
     - name: Verify ECR image
       run: |
         echo "Verifying ECR image..."
-        docker pull ${{ env.ECR_IMAGE }}
+        docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
         
-        docker run -d -p 8081:8080 --name verify-ecr ${{ env.ECR_IMAGE }}
+        docker run -d -p 8081:8080 --name verify-ecr ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
         sleep 20
         
         if curl -f http://localhost:8081/health; then
