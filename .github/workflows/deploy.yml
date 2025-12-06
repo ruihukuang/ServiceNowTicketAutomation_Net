@@ -73,14 +73,19 @@ jobs:
         docker tag $IMAGE_TAG ${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
         docker push ${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
 
+        FULL_IMAGE_NAME="${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG"
+
+        # Set output for the next step
+        echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
+
 
     - name: Verify ECR image
       run: |
         echo "Verifying ECR image..."
-        docker pull ${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+        docker pull ${{ env.FULL_IMAGE_NAME }}
         
-        docker run -d -p 8081:8080 --name verify-ecr ${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
-        sleep 20
+        docker run -d -p 8081:8080 --name verify-ecr ${{ env.FULL_IMAGE_NAME }}
+        sleep 60
         
         if curl -f http://localhost:8081/health; then
           echo "✅ ECR image verified"
@@ -96,35 +101,17 @@ jobs:
   deploy-infrastructure:
     needs: build-push-to-ecr
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref_name == 'main'
-    environment: ${{ github.event.inputs.environment || 'staging' }}
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Configure AWS
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
     
     - name: Deploy CloudFormation Stack
       run: |
-        ENVIRONMENT=${{ github.event.inputs.environment || 'staging' }}
-        STACK_NAME="servicenow-$ENVIRONMENT"
         
         echo "🚀 Deploying infrastructure for $ENVIRONMENT..."
         
         aws cloudformation deploy \
           --stack-name $STACK_NAME \
           --template-file infrastructure/main.yaml \
-          --parameter-overrides \
-            EnvironmentName=$ENVIRONMENT \
-            GitHubUsername=${{ github.repository_owner }} \
-            GitHubRepo=${{ github.event.repository.name }} \
-            DomainName=api.$ENVIRONMENT.servicenow-automation.com \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --region ${{ env.AWS_REGION }} \
           --no-fail-on-empty-changeset
@@ -141,15 +128,9 @@ jobs:
   update-ecs-service:
     needs: [build-push-to-ecr, deploy-infrastructure]
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+
     
     steps:
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
     
     - name: Get CloudFormation outputs
       id: cf-outputs

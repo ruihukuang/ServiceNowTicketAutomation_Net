@@ -43,7 +43,7 @@ Resources:
       TemplateURL: ./ecr-repository.yaml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
-        RepositoryName: !Sub servicenow-${EnvironmentName}
+        RepositoryName:  servicenow_repo
 
   # 3. ECS Cluster with VPC Endpoints
   ECSClusterStack:

@@ -94,7 +94,7 @@ Outputs:
   
   RepositoryUri:
     Description: 'ECR Repository URI'
-    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}
+    Value: !Sub public.ecr.aws/g1n7j8p0/${ECRRepository}
   
   RepositoryArn:
     Description: 'ECR Repository ARN'
