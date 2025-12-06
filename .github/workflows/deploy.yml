@@ -62,6 +62,7 @@ jobs:
           #   aws ecr-public batch-delete-image --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1 --image-ids imageTag="$tag"
           # done
          echo "images_exists=true" >> $GITHUB_ENV
+         echo "FULL_IMAGE_NAME=$matching_images" >> $GITHUB_ENV
          else
            echo "No images found with tags ending in _servicenow."
            echo "images_exists=false" >> $GITHUB_ENV
