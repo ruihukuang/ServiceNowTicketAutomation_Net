@@ -8,7 +8,7 @@ on:
       environment:
         description: 'Environment to deploy'
         required: true
-        default: 'main'
+        default: 'staging'
         type: choice
         options:
           - staging
@@ -56,11 +56,8 @@ jobs:
         fi
         
         # 设置 GHCR package 名称
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.ghcr_package_name }}" ]; then
-          PACKAGE_NAME="${{ github.event.inputs.ghcr_package_name }}"
-        else
-          PACKAGE_NAME="servicenowticketautomation_net"
-        fi
+        PACKAGE_NAME="servicenowticketautomation_net"
+
         
         echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
         echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
