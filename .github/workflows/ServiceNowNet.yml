@@ -5,10 +5,22 @@ on: [push, pull_request]
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Convert repository name to lowercase
+      id: lowercase
+      run: |
+        # 将仓库名称转换为全小写
+        REPO_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+        echo "REPO_NAME_LOWER=$REPO_NAME_LOWER" >> $GITHUB_OUTPUT
+        echo "Original: ${{ github.repository }}"
+        echo "Lowercase: $REPO_NAME_LOWER"
 
     - name: Build Docker image
       run: |
@@ -20,22 +32,47 @@ jobs:
         docker run -d -p 8080:8080 --name test-app myapp:${{ github.sha }}
         
         # Wait for startup
+        echo "Waiting for application to start..."
         sleep 15
         
-        # Test it
-        curl -f http://localhost:8080/health || exit 1
+        # Test health endpoint
+        echo "Testing health endpoint..."
+        if curl -f http://localhost:8080/health; then
+          echo "✅ Health check passed"
+        else
+          echo "❌ Health check failed"
+          echo "Container logs:"
+          docker logs test-app
+          exit 1
+        fi
+        
+        # Test additional endpoints
+        echo "Testing root endpoint..."
+        curl -s http://localhost:8080/ || echo "Root endpoint test failed"
         
         # Check logs for errors
+        echo "Checking container logs..."
         docker logs test-app
         
-        # Stop container
+        # Stop and remove container
         docker stop test-app
         docker rm test-app
 
     - name: Push to GHCR (only on main)
       if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       run: |
-        docker tag myapp:${{ github.sha }} ghcr.io/${{ github.repository }}:${{ github.sha }}
-        docker tag myapp:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
+        # 登录到 GitHub Container Registry
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        docker push ghcr.io/${{ github.repository }} --all-tags
+        
+        # 使用转换后的小写名称
+        echo "Tagging images..."
+        docker tag myapp:${{ github.sha }} ghcr.io/${{ steps.lowercase.outputs.REPO_NAME_LOWER }}:${{ github.sha }}
+        docker tag myapp:${{ github.sha }} ghcr.io/${{ steps.lowercase.outputs.REPO_NAME_LOWER }}:latest
+        
+        echo "Pushing images to GHCR..."
+        docker push ghcr.io/${{ steps.lowercase.outputs.REPO_NAME_LOWER }}:${{ github.sha }}
+        docker push ghcr.io/${{ steps.lowercase.outputs.REPO_NAME_LOWER }}:latest
+        
+        echo "✅ Images pushed successfully!"
+        echo "📦 Repository: ghcr.io/${{ steps.lowercase.outputs.REPO_NAME_LOWER }}"
+        echo "🏷️  Tags: ${{ github.sha }} and latest"

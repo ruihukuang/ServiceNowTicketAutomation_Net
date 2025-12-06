@@ -10,6 +10,8 @@ This project is to automate the process of providing insights for ServiceNow inc
 
 Fake data are created for this project but they are based on actual cases in industry. 
 
+The front end link is https://github.com/ruihukuang/ServiceNowTicketAutomation_React.
+
 Design  
 
 <img width="1295" height="719" alt="image" src="https://github.com/user-attachments/assets/f55fc5b9-09f6-4bbb-8fa1-76c240a1f2ff" />
