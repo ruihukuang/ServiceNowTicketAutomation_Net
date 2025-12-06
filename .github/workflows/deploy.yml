@@ -72,11 +72,10 @@ jobs:
         echo "ghcr_image_latest=ghcr.io/${{ github.repository_owner }}/$PACKAGE_NAME:latest" >> $GITHUB_OUTPUT
     
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@v1
       with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
-        aws-region: ${{ env.AWS_REGION }}
-        role-session-name: GitHubActions-${{ github.run_id }}
+        role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
+        aws-region: ${{ secrets.REGION }}
     
     - name: Login to Amazon ECR
       id: login-ecr
