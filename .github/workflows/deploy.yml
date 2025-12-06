@@ -84,14 +84,18 @@ jobs:
 
 
     - name: Verify ECR image
+      env:
+      ECR_REGISTRY: public.ecr.aws/g1n7j8p0  # Your public ECR registry
+      ECR_REPOSITORY: servicenow_repo  # Your repository name
+      IMAGE_TAG: ${{ github.sha }}_servicenow  # Your tag format
       run: |
-        docker logout public.ecr.aws
+        echo "🔄 Logging into Public ECR..."
         aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
-        
+
         echo "Verifying ECR image..."
-        docker pull ${{ env.FULL_IMAGE_NAME }}
+        docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         
-        docker run -d -p 8081:8080 --name verify-ecr ${{ env.FULL_IMAGE_NAME }}
+        docker run -d -p 8081:8080 --name verify-ecr $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         sleep 60
         
         if curl -f http://localhost:8081/health; then
