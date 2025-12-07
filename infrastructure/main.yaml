@@ -27,7 +27,7 @@ Resources:
   VPCStack: 
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/vpc-isolated.yam
+      TemplateURL: !Sub "https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/vpc-isolated.yaml"
       Parameters:
         EnvironmentName: !Ref EnvironmentName
 
