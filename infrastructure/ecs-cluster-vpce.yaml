@@ -8,6 +8,13 @@ Parameters:
     Type: AWS::EC2::VPC::Id
   PrivateSubnetIds:
     Type: CommaDelimitedList
+  ECSSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: 'ECS Security Group ID from VPC stack'
+  PrivateRouteTableId:
+    Type: AWS::EC2::RouteTable::Id
+    Description: 'Private Route Table ID from VPC stack'
+  
 
 Resources:
   # ECS Cluster
@@ -33,11 +40,11 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VpcId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.public.api
+      ServiceName: !Sub com.amazonaws.us-east-1.ecr.public.api # 硬编码 us-east-1
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroup
+        - !Ref ECSSecurityGroupId  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -48,11 +55,11 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VpcId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.public.dkr
+      ServiceName: !Sub  com.amazonaws.us-east-1.ecr.public.dkr # 硬编码 us-east-1
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroup
+        - !Ref ECSSecurityGroupId  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -66,7 +73,7 @@ Resources:
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
       VpcEndpointType: Gateway
       RouteTableIds:
-        - !Ref PrivateRouteTable
+        - !Ref PrivateRouteTableId  # 修改为引用参数
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -89,7 +96,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroup
+        - !Ref ECSSecurityGroupId  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -104,7 +111,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroup
+        - !Ref ECSSecurityGroupId  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -119,7 +126,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroup
+        - !Ref ECSSecurityGroupId  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name

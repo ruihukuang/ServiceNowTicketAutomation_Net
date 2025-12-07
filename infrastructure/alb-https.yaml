@@ -13,6 +13,9 @@ Parameters:
   ContainerPort:
     Type: Number
     Default: 8080
+  ALBSecurityGroupId:  # 添加这个参数
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: 'ALB Security Group ID from VPC stack'
 
 Resources:
   # Application Load Balancer
@@ -23,7 +26,7 @@ Resources:
       Scheme: internet-facing
       Subnets: !Ref PublicSubnetIds
       SecurityGroups:
-        - !Ref ALBSecurityGroup
+        - !Ref ALBSecurityGroupId
       Type: application
       IpAddressType: ipv4
       Tags:
