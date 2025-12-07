@@ -12,8 +12,8 @@ permissions:
 env:
   ECR_REGISTRY: public.ecr.aws
   ECR_REPOSITORY: ${{ secrets.RESPOSITORY_NAME }} 
-
-  
+  TEMPLATE_BUCKET: "my-cfn-templates-bucket"
+  AWS_REGION: ${{ secrets.AWS_REGION }}
 
 jobs:
   build-push-to-ecr:
@@ -123,6 +123,62 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
         aws-region: ${{ secrets.REGION }}
+
+    - name: Upload Nested Templates to S3
+      run: |
+        echo "📤 Uploading nested CloudFormation templates to S3..."
+        
+        # Create S3 bucket if it doesn't exist
+        if ! aws s3api head-bucket --bucket $TEMPLATE_BUCKET 2>/dev/null; then
+          echo "🪣 Creating S3 bucket: $TEMPLATE_BUCKET"
+          aws s3api create-bucket \
+            --bucket $TEMPLATE_BUCKET \
+            --region $AWS_REGION \
+            --create-bucket-configuration LocationConstraint=$AWS_REGION
+    
+              # Set bucket policy to allow CloudFormation access
+          cat > bucket-policy.json << EOF
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                   "Service": "cloudformation.amazonaws.com"
+                },
+                "Action": "s3:GetObject",
+                "Resource": "arn:aws:s3:::$TEMPLATE_BUCKET/*"
+              }
+            ]
+          }
+          EOF
+          aws s3api put-bucket-policy --bucket $TEMPLATE_BUCKET --policy file://bucket-policy.json
+        fi
+
+        # Upload all nested templates
+        echo "📄 Uploading vpc-isolated.yaml..."
+        aws s3 cp infrastructure/vpc-isolated.yaml s3://$TEMPLATE_BUCKET/vpc-isolated.yaml \
+          --content-type "text/yaml" \
+          --cache-control "max-age=0, no-cache"
+        
+        echo "📄 Uploading ecs-cluster-vpce.yaml..."
+        aws s3 cp infrastructure/ecs-cluster-vpce.yaml s3://$TEMPLATE_BUCKET/ecs-cluster-vpce.yaml \
+          --content-type "text/yaml" \
+          --cache-control "max-age=0, no-cache"
+        
+        echo "📄 Uploading alb-https.yaml..."
+        aws s3 cp infrastructure/alb-https.yaml s3://$TEMPLATE_BUCKET/alb-https.yaml \
+          --content-type "text/yaml" \
+          --cache-control "max-age=0, no-cache"
+        
+        echo "📄 Uploading ecs-service-private.yaml..."
+        aws s3 cp infrastructure/ecs-service-private.yaml s3://$TEMPLATE_BUCKET/ecs-service-private.yaml \
+          --content-type "text/yaml" \
+          --cache-control "max-age=0, no-cache"
+        
+        # Verify uploads
+        echo "✅ Verifying uploads..."
+        aws s3 ls s3://$TEMPLATE_BUCKET/ --recursive --human-readable
     
     - name: Deploy CloudFormation Stack
       run: |
@@ -142,8 +198,8 @@ jobs:
         # 等待栈创建完成
         echo "⏳ Waiting for stack creation..."
         aws cloudformation wait stack-create-complete \
-          --stack-name $STACK_NAME \
-          --region ${{ env.AWS_REGION }}
+          --stack-name "servicenow-automation-production" \
+          --region ${{ secrets.REGION }}
         
         echo "✅ Infrastructure deployed successfully!"
 
