@@ -40,6 +40,9 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt VPCStack.Outputs.VpcId
         PrivateSubnetIds: !GetAtt VPCStack.Outputs.PrivateSubnetIds
+        ECSSecurityGroupId: !GetAtt VPCStack.Outputs.ECSSecurityGroupId
+        PrivateRouteTableId: !GetAtt VPCStack.Outputs.PrivateRouteTableId
+
 
   # 3. ALB with HTTPS
   ALBStack:
@@ -52,6 +55,7 @@ Resources:
         PublicSubnetIds: !GetAtt VPCStack.Outputs.PublicSubnetIds
         DomainName: !Ref DomainName
         ContainerPort: !Ref ContainerPort
+        ALBSecurityGroupId: !GetAtt VPCStack.Outputs.ALBSecurityGroupId
 
   # 4. ECS Service in private subnet
   ECSServiceStack:
@@ -65,6 +69,7 @@ Resources:
         PrivateSubnetIds: !GetAtt VPCStack.Outputs.PrivateSubnetIds
         ClusterName: !GetAtt ECSClusterStack.Outputs.ClusterName
         TargetGroupArn: !GetAtt ALBStack.Outputs.TargetGroupArn
+        ECSSecurityGroupId: !GetAtt VPCStack.Outputs.ECSSecurityGroupId
         ECRRepositoryUri: public.ecr.aws/g1n7j8p0/servicenow_repo
         ContainerPort: !Ref ContainerPort
         DesiredCount: 2
