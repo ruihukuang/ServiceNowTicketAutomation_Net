@@ -133,10 +133,9 @@ jobs:
           --stack-name $STACK_NAME \
           --template-file infrastructure/main.yaml \
           --parameter-overrides \
-            EnvironmentName=$ENVIRONMENT \
-            DomainName=api.$ENVIRONMENT.servicenow-automation.com \
+            EnvironmentName="production"\
+            DomainName=api.production.servicenow-automation.com \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-          --region ${{ env.AWS_REGION }} \
           --no-fail-on-empty-changeset
         
         # 等待栈创建完成
