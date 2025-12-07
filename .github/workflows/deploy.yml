@@ -14,6 +14,8 @@ env:
   ECR_REPOSITORY: ${{ secrets.RESPOSITORY_NAME }} 
   TEMPLATE_BUCKET: "my-cfn-templates-bucket-7-12-2025"
   AWS_REGION: ${{ secrets.AWS_REGION }}
+  STACK_NAME: servicenow-automation-production
+  EnvironmentName: production
 
 jobs:
   build-push-to-ecr:
@@ -186,11 +188,11 @@ jobs:
         echo "🚀 Deploying infrastructure for production..."
         
         aws cloudformation deploy \
-          --stack-name "servicenow-automation-production" \
+          --stack-name $STACK_NAME \
           --template-file infrastructure/main.yaml \
           --parameter-overrides \
-            EnvironmentName="production" \
-            DomainName=api.production.servicenow-automation.com \
+            EnvironmentName=$EnvironmentName \
+            DomainName=api.$EnvironmentName.servicenow-automation.com \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --region ${{ secrets.REGION }} \
           --no-fail-on-empty-changeset
