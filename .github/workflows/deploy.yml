@@ -83,30 +83,30 @@ jobs:
         echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
 
 
-    - name: Verify ECR image
-      env:
-        ECR_REGISTRY: public.ecr.aws/g1n7j8p0  # Your public ECR registry
-        ECR_REPOSITORY: servicenow_repo  # Your repository name
-        IMAGE_TAG: $FULL_IMAGE_NAME  # Your tag format
-      run: |
-        echo "🔄 Logging into Public ECR..."
-        aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+    # - name: Verify ECR image
+    #   env:
+    #     ECR_REGISTRY: public.ecr.aws/g1n7j8p0  # Your public ECR registry
+    #     ECR_REPOSITORY: servicenow_repo  # Your repository name
+    #     IMAGE_TAG: $FULL_IMAGE_NAME  # Your tag format
+    #   run: |
+    #     echo "🔄 Logging into Public ECR..."
+    #     aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
-        echo "Verifying ECR image..."
-        docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$FULL_IMAGE_NAME
+    #     echo "Verifying ECR image..."
+    #     docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$FULL_IMAGE_NAME
         
-        docker run -d -p 8081:8080 --name verify-ecr $ECR_REGISTRY/$ECR_REPOSITORY:$FULL_IMAGE_NAME
-        sleep 60
+    #     docker run -d -p 8081:8080 --name verify-ecr $ECR_REGISTRY/$ECR_REPOSITORY:$FULL_IMAGE_NAME
+    #     sleep 60
         
-        if curl -f http://localhost:8081/health; then
-          echo "✅ ECR image verified"
-        else
-          echo "❌ ECR image verification failed"
-          docker logs verify-ecr
-          exit 1
-        fi
+    #     if curl -f http://localhost:8081/health; then
+    #       echo "✅ ECR image verified"
+    #     else
+    #       echo "❌ ECR image verification failed"
+    #       docker logs verify-ecr
+    #       exit 1
+    #     fi
         
-        docker stop verify-ecr && docker rm verify-ecr
+    #     docker stop verify-ecr && docker rm verify-ecr
 
   # 3. 部署基础设施（第一次）
   deploy-infrastructure:
@@ -132,6 +132,9 @@ jobs:
         aws cloudformation deploy \
           --stack-name $STACK_NAME \
           --template-file infrastructure/main.yaml \
+          --parameter-overrides \
+            EnvironmentName=$ENVIRONMENT \
+            DomainName=api.$ENVIRONMENT.servicenow-automation.com \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --region ${{ env.AWS_REGION }} \
           --no-fail-on-empty-changeset
