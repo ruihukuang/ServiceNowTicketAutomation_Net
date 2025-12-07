@@ -130,12 +130,13 @@ jobs:
         echo "🚀 Deploying infrastructure for $ENVIRONMENT..."
         
         aws cloudformation deploy \
-          --stack-name $STACK_NAME \
+          --stack-name "servicenow-automation-production" \
           --template-file infrastructure/main.yaml \
           --parameter-overrides \
-            EnvironmentName="production"\
+            EnvironmentName="production" \
             DomainName=api.production.servicenow-automation.com \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+          --region ${{ secrets.REGION }} \
           --no-fail-on-empty-changeset
         
         # 等待栈创建完成
