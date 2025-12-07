@@ -135,25 +135,25 @@ jobs:
             --bucket $TEMPLATE_BUCKET \
             --region $AWS_REGION \
             --create-bucket-configuration LocationConstraint=$AWS_REGION
-    
-              # Set bucket policy to allow CloudFormation access
-          cat > bucket-policy.json << EOF
-          {
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Effect": "Allow",
-                "Principal": {
-                   "Service": "cloudformation.amazonaws.com"
-                },
-                "Action": "s3:GetObject",
-                "Resource": "arn:aws:s3:::$TEMPLATE_BUCKET/*"
-              }
-            ]
-          }
-          EOF
-          aws s3api put-bucket-policy --bucket $TEMPLATE_BUCKET --policy file://bucket-policy.json
-        fi
+
+              # Apply bucket policy using AWS CLI
+             aws s3api put-bucket-policy \
+               --bucket $TEMPLATE_BUCKET \
+               --policy "{
+                    \"Version\": \"2012-10-17\",
+                    \"Statement\": [
+                    {
+                     \"Effect\": \"Allow\",
+                      \"Principal\": {
+                      \"Service\": \"cloudformation.amazonaws.com\"
+                    },
+                    \"Action\": \"s3:GetObject\",
+                    \"Resource\": \"arn:aws:s3:::${TEMPLATE_BUCKET}/*\"
+                  }
+                ]
+              }"
+  
+         fi
 
         # Upload all nested templates
         echo "📄 Uploading vpc-isolated.yaml..."
