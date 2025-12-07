@@ -16,31 +16,36 @@ Parameters:
     Type: Number
     Default: 8080
     Description: 'Container port'
+  
+  TemplateBucket:
+    Type: String
+    Default: my-cfn-templates-bucket
+    Description: 'S3 bucket containing nested templates'
 
 Resources:
   # 1. VPC with isolated private subnets
   VPCStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: ./vpc-isolated.yaml
+      TemplateURL: https://s3.amazonaws.com/${TemplateBucket}/vpc-isolated.yaml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
 
-# 2. ECS Cluster with VPC Endpoints
+  # 2. ECS Cluster with VPC Endpoints
   ECSClusterStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: ./ecs-cluster-vpce.yaml
+      TemplateURL: https://s3.amazonaws.com/${TemplateBucket}/ecs-cluster-vpce.yaml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt VPCStack.Outputs.VpcId
         PrivateSubnetIds: !GetAtt VPCStack.Outputs.PrivateSubnetIds
 
-  # 4. ALB with HTTPS
+  # 3. ALB with HTTPS
   ALBStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: ./alb-https.yaml
+      TemplateURL: https://s3.amazonaws.com/${TemplateBucket}/alb-https.yaml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt VPCStack.Outputs.VpcId
@@ -48,12 +53,12 @@ Resources:
         DomainName: !Ref DomainName
         ContainerPort: !Ref ContainerPort
 
-  # 5. ECS Service in private subnet
+  # 4. ECS Service in private subnet
   ECSServiceStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: [ ALBStack]
+    DependsOn: ALBStack
     Properties:
-      TemplateURL: ./ecs-service-private.yaml
+      TemplateURL: https://s3.amazonaws.com/${TemplateBucket}/ecs-service-private.yaml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt VPCStack.Outputs.VpcId
@@ -78,4 +83,3 @@ Outputs:
   ECSServiceName:
     Description: 'ECS Service Name'
     Value: !GetAtt ECSServiceStack.Outputs.ServiceName
-  

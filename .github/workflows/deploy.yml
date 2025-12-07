@@ -127,7 +127,7 @@ jobs:
     - name: Deploy CloudFormation Stack
       run: |
         
-        echo "🚀 Deploying infrastructure for $ENVIRONMENT..."
+        echo "🚀 Deploying infrastructure for production..."
         
         aws cloudformation deploy \
           --stack-name "servicenow-automation-production" \
