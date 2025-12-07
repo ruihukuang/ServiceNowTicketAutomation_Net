@@ -19,7 +19,7 @@ Parameters:
   
   TemplateBucket:
     Type: String
-    Default: my-cfn-templates-bucket
+    Default: my-cfn-templates-bucket-7-12-2025
     Description: 'S3 bucket containing nested templates'
 
 Resources:
