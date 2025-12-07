@@ -27,7 +27,7 @@ Resources:
   VPCStack: 
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://${TemplateBucket}.s3.ap-southeast-2.amazonaws.com/vpc-isolated.yaml
+      TemplateURL: !Sub "https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/vpc-isolated.yam
       Parameters:
         EnvironmentName: !Ref EnvironmentName
 
@@ -35,7 +35,7 @@ Resources:
   ECSClusterStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://${TemplateBucket}.s3.ap-southeast-2.amazonaws.com/ecs-cluster-vpce.yaml
+      TemplateURL: !Sub "https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/ecs-cluster-vpce.yaml"
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt VPCStack.Outputs.VpcId
@@ -45,7 +45,7 @@ Resources:
   ALBStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://${TemplateBucket}.s3.ap-southeast-2.amazonaws.com/alb-https.yaml
+      TemplateURL: !Sub "https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/alb-https.yaml"
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt VPCStack.Outputs.VpcId
@@ -58,7 +58,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: ALBStack
     Properties:
-      TemplateURL: https://${TemplateBucket}.s3.ap-southeast-2.amazonaws.com/ecs-service-private.yaml
+      TemplateURL: !Sub "https://${TemplateBucket}.s3.${AWS::Region}.amazonaws.com/ecs-service-private.yaml"
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt VPCStack.Outputs.VpcId
