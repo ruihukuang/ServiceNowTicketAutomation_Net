@@ -24,7 +24,7 @@ Parameters:
 
 Resources:
   # 1. VPC with isolated private subnets
-  VPCStack:
+  VPCStack: gt
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: https://s3.amazonaws.com/${TemplateBucket}/vpc-isolated.yaml
