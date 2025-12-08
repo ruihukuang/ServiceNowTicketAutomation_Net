@@ -127,84 +127,19 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
         aws-region: ${{ secrets.REGION }}
 
-    # - name: Upload Nested Templates to S3
-    #   run: |
-    #     echo "📤 Uploading nested CloudFormation templates to S3..."
-        
-    #     # Create S3 bucket if it doesn't exist
-    #     if ! aws s3api head-bucket --bucket $TEMPLATE_BUCKET 2>/dev/null; then
-    #       echo "🪣 Creating S3 bucket: $TEMPLATE_BUCKET"
-    #       aws s3api create-bucket \
-    #         --bucket $TEMPLATE_BUCKET \
-    #         --region $AWS_REGION \
-    #         --create-bucket-configuration LocationConstraint=$AWS_REGION
-
-    #           # Apply bucket policy using AWS CLI
-    #          aws s3api put-bucket-policy \
-    #            --bucket $TEMPLATE_BUCKET \
-    #            --policy "{
-    #                 \"Version\": \"2012-10-17\",
-    #                 \"Statement\": [
-    #                 {
-    #                  \"Effect\": \"Allow\",
-    #                   \"Principal\": {
-    #                   \"Service\": \"cloudformation.amazonaws.com\"
-    #                 },
-    #                 \"Action\": \"s3:GetObject\",
-    #                 \"Resource\": \"arn:aws:s3:::${TEMPLATE_BUCKET}/*\"
-    #               }
-    #             ]
-    #           }"
-  
-    #      fi
-
-    #     # Upload all nested templates
-    #     echo "📄 Uploading vpc-isolated.yaml..."
-    #     aws s3 cp infrastructure/vpc-isolated.yaml s3://$TEMPLATE_BUCKET/vpc-isolated.yaml \
-    #       --content-type "text/yaml" \
-    #       --cache-control "max-age=0, no-cache"
-        
-    #     echo "📄 Uploading ecs-cluster-vpce.yaml..."
-    #     aws s3 cp infrastructure/ecs-cluster-vpce.yaml s3://$TEMPLATE_BUCKET/ecs-cluster-vpce.yaml \
-    #       --content-type "text/yaml" \
-    #       --cache-control "max-age=0, no-cache"
-        
-    #     echo "📄 Uploading alb-https.yaml..."
-    #     aws s3 cp infrastructure/alb-https.yaml s3://$TEMPLATE_BUCKET/alb-https.yaml \
-    #       --content-type "text/yaml" \
-    #       --cache-control "max-age=0, no-cache"
-        
-    #     echo "📄 Uploading ecs-service-private.yaml..."
-    #     aws s3 cp infrastructure/ecs-service-private.yaml s3://$TEMPLATE_BUCKET/ecs-service-private.yaml \
-    #       --content-type "text/yaml" \
-    #       --cache-control "max-age=0, no-cache"
-        
-    #     # Verify uploads
-    #     echo "✅ Verifying uploads..."
-    #     aws s3 ls s3://$TEMPLATE_BUCKET/ --recursive --human-readable
-
     - name: Check if VPC Stack Already Exists
       id: check_vpc
       run: |
         echo "🔍 Checking if VPC stack already exists..."   
-        # Verify vpc stack outputs exist
-        echo "🔍 Verifying vpc stack id..."
-        VPC_ID=$(aws cloudformation describe-stacks \
-          --stack-name $VPC_STACK \
-          --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue" \
-          --output text \
-          --region $AWS_REGION)
-        
-        if [ -n "$VPC_ID" ]; then
-          echo "✅ VPC stack id is valid"
-          echo "outputs_valid=true" >> $GITHUB_OUTPUT
+        # First check if VPC stack exists at all
+        if aws cloudformation describe-stacks --stack-name $VPC_STACK --region $AWS_REGION 2>/dev/null; then
+        echo "✅ VPC stack exists"
+        echo "vpc_exists=true" >> $GITHUB_OUTPUT
         else
-          echo "⚠️ VPC stack id are invalid"
-          echo "outputs_valid=false" >> $GITHUB_OUTPUT
-        fi
+        echo "vpc_exists=false" >> $GITHUB_OUTPUT
     
     - name: Deploy CloudFormation VPC Stack
-      if: steps.check_vpc.outputs.outputs_valid == 'false'
+      if: steps.check_vpc.outputs.vpc_exists == 'false'
       run: |
         
         echo "🚀 Deploying infrastructure for production..."
@@ -246,25 +181,16 @@ jobs:
       id: check_ecs
       run: |
         echo "🔍 Checking if ECS cluster stack already exists..."   
-        # Verify outputs exist
-        echo "🔍 Verifying ecs cluster stack name..."
-        ClusterName=$(aws cloudformation describe-stacks \
-          --stack-name $ECS_CLUSTER_STACK\
-          --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue" \
-          --output text \
-          --region $AWS_REGION)
-        
-        if [ -n "$ClusterName" ]; then
-          echo "✅ ECS cluster stack name is valid"
-          echo "outputs_ECSClusterName=true" >> $GITHUB_OUTPUT
+        # First check if ECS cluster stack exists at all
+        if aws cloudformation describe-stacks --stack-name $ECS_CLUSTER_STACK --region $AWS_REGION 2>/dev/null; then
+        echo "✅ ECS cluster stack exists"
+        echo "ECSCluster_exists=true" >> $GITHUB_OUTPUT
         else
-          echo "⚠️ ECS cluster stack name is invalid"
-          echo "outputs_ECSClusterName=false" >> $GITHUB_OUTPUT
-        fi
+        echo "ECSCluster_exists=false" >> $GITHUB_OUTPUT
     
 
     - name: Deploy CloudFormation ECS cluster Stack
-      if: steps.check_ecs.outputs.outputs_ECSClusterName == 'false'
+      if: steps.check_ecs.outputs.ECSCluster_exists == 'false'
       run: |
         
         echo "🚀 Deploying infrastructure for production..."
