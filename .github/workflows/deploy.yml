@@ -33,7 +33,7 @@ jobs:
     
     - name: Login to Amazon ECR Private Registry
       run: |
-      # Get ECR registry ID from account ID
+        # Get ECR registry ID from account ID
         ECR_REGISTRY=${{ secrets.ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
         echo "ECR_REGISTRY=$ECR_REGISTRY" >> $GITHUB_ENV
 
