@@ -226,6 +226,17 @@ jobs:
         echo "Private Subnets: $PRIVATE_SUBNETS"
         echo "ECS Security Group: $ECS_SG_ID"
         echo "Private Route Table: $PRIVATE_RT_ID"
+
+        # Verify the subnet string is properly formatted
+        echo "🔍 Verifying subnet format..."
+        if [[ $PRIVATE_SUBNETS == *","* ]]; then
+          echo "✅ Subnets are comma-separated: $PRIVATE_SUBNETS"
+        else
+        echo "⚠️ Subnets may not be properly comma-separated"
+        # If not comma-separated, fix it
+        PRIVATE_SUBNETS="${PRIVATE_SUBNETS// /,}"  # Replace spaces with commas
+        echo "🔧 Fixed subnets: $PRIVATE_SUBNETS"
+        fi
         
         # Try to create stack with debug output
         set +e
