@@ -12,8 +12,10 @@ Parameters:
     Type: AWS::EC2::SecurityGroup::Id
     Description: 'ECS Security Group ID from VPC stack'
   PrivateRouteTableId:
-    Type: AWS::EC2::RouteTable::Id
-    Description: 'Private Route Table ID from VPC stack'
+    Type: String  # CHANGED: Use String type instead
+    Description: 'Private Route Table ID from VPC stack (e.g., rtb-xxxxxx)'
+    AllowedPattern: '^rtb-[a-z0-9]{8,17}$'  # ADDED: Validation pattern
+    ConstraintDescription: 'Must be a valid Route Table ID (rtb-xxxxxx)'
   
 
 Resources:
