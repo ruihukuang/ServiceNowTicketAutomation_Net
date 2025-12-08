@@ -82,7 +82,7 @@ jobs:
     - name: Build, tag, and push a docker image to Amazon ECR if an docker image does not exist
       env:
         IMAGE_TAG: ${{ github.sha }}_servicenow
-      if: env.images_exists == 'false'
+      if: env.image_exists == 'false'
       run: |
         # Build with multiple tags
         docker build \
