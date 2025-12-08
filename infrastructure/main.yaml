@@ -88,3 +88,7 @@ Outputs:
   ECSServiceName:
     Description: 'ECS Service Name'
     Value: !GetAtt ECSServiceStack.Outputs.ServiceName
+
+  DebugRouteTableId:
+    Description: 'Debug - PrivateRouteTableId value'
+    Value: !GetAtt VPCStack.Outputs.PrivateRouteTableId
