@@ -183,7 +183,7 @@ jobs:
     
     - name: Deploy CloudFormation VPC Stack
       env:
-        STACK_NAME: "VPC Stack"
+        STACK_NAME: "VPC-Stack"
       run: |
         
         echo "🚀 Deploying infrastructure for production..."
