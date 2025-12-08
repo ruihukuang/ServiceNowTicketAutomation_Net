@@ -261,7 +261,7 @@ jobs:
         aws cloudformation create-stack \
           --stack-name test-debug \
           --template-body file://infrastructure/ecs-cluster-vpce.yaml \
-          --parameter-overrides file://parameters.json \
+          --parameters file://parameters.json \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --region $AWS_REGION \
           --output text 2>&1 | tee cf-error.log
