@@ -42,7 +42,7 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VpcId
-      ServiceName: !Sub com.amazonaws.us-east-1.ecr.public.api # 硬编码 us-east-1
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api  # CORRECT
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
@@ -50,14 +50,14 @@ Resources:
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-public-ecr-api-endpoint
+          Value: !Sub ${EnvironmentName}-ecr-api-endpoint
 
   # 2. ECR DKR Endpoint (用于拉取镜像)
   ECRDkrEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VpcId
-      ServiceName: !Sub  com.amazonaws.us-east-1.ecr.public.dkr # 硬编码 us-east-1
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr  # CORRECT
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
@@ -65,7 +65,7 @@ Resources:
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-public-ecr-dkr-endpoint
+          Value: !Sub ${EnvironmentName}-ecr-dkr-endpoint
 
   # 3. S3 Gateway Endpoint (ECR镜像层存储在S3)
   S3Endpoint:

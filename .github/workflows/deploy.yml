@@ -10,7 +10,6 @@ permissions:
   packages: read    # Required for pulling from GHCR
 
 env:
-  ECR_REGISTRY: public.ecr.aws
   ECR_REPOSITORY: ${{ secrets.RESPOSITORY_NAME }} 
   #TEMPLATE_BUCKET: "my-cfn-templates-bucket-7-12-2025"
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -32,84 +31,125 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
         aws-region: ${{ secrets.REGION }}
     
-    - name: Log in to Amazon ECR
+    - name: Login to Amazon ECR Private Registry
       run: |
-        docker logout public.ecr.aws
-        aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      # Get ECR registry ID from account ID
+        ECR_REGISTRY=${{ secrets.ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+        echo "ECR_REGISTRY=$ECR_REGISTRY" >> $GITHUB_ENV
 
-    - name: Check if ECR Repository Exists
+        # Login to private ECR
+        aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+        docker login --username AWS --password-stdin $ECR_REGISTRY
+
+    - name: Check if ECR Private Repository Exists
       id: check_repo
       run: |
-        if aws ecr-public describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region us-east-1 ; then
-          echo "repository_exists=true" >> $GITHUB_ENV
+        if aws ecr describe-repositories \
+           --repository-names ${{ env.ECR_REPOSITORY }} \
+           --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+           echo "repository_exists=true" >> $GITHUB_ENV
         else
-          echo "repository_exists=false" >> $GITHUB_ENV
+           echo "repository_exists=false" >> $GITHUB_ENV
         fi
         
-    - name: Create a Public ECR Repository for Model Artifacts if it does not exist
+    - name: Create Private ECR Repository if it does not exist
       if: env.repository_exists == 'false'
       run: |
-        aws ecr-public create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1
+         aws ecr create-repository \
+           --repository-name ${{ env.ECR_REPOSITORY }} \
+           --region ${{ env.AWS_REGION }}
     
     - name: check if an docker image  exists and act accordingly
       run: |
-        output=$(aws ecr-public describe-images --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1 )
-        matching_images=$(echo "$output" | jq -r '.imageDetails[].imageTags[] | select(endswith("_servicenow"))')
+        # Check for images with specific tag pattern
+        IMAGE_TAG="${{ github.sha }}_servicenow"
+        FULL_IMAGE_NAME="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG"
 
-        # Check if any matching images were found
-        if [ -n "$matching_images" ]; then
-          echo "Found images with tags ending in _servicenow:"
-          echo "$matching_images"
-              # Loop through each matching image tag and delete it
-          # for tag in $matching_images; do
-          #   aws ecr-public batch-delete-image --repository-name ${{ env.ECR_REPOSITORY }} --region us-east-1 --image-ids imageTag="$tag"
-          # done
-         echo "images_exists=true" >> $GITHUB_ENV
-         echo "FULL_IMAGE_NAME=$matching_images" >> $GITHUB_ENV
-         else
-           echo "No images found with tags ending in _servicenow."
-           echo "images_exists=false" >> $GITHUB_ENV
+        # Check if image with this tag already exists
+        if aws ecr describe-images \
+          --repository-name ${{ env.ECR_REPOSITORY }} \
+          --image-ids imageTag=$IMAGE_TAG \
+          --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+          echo "image_exists=true" >> $GITHUB_ENV
+          echo "EXISTING_IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+        else
+          echo "image_exists=false" >> $GITHUB_ENV
         fi
+      
+        echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
+
+
         
-    - name: Build, tag, and push image to Amazon ECR if an docker image does not exist
+    - name: Build, tag, and push a docker image to Amazon ECR if an docker image does not exist
       env:
         IMAGE_TAG: ${{ github.sha }}_servicenow
       if: env.images_exists == 'false'
       run: |
-        docker build -t $IMAGE_TAG  .
-        docker tag $IMAGE_TAG ${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
-        docker push ${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+      # Build with multiple tags
+         docker build \
+          -t ${{ env.FULL_IMAGE_NAME }} \
+          -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest \
+      
+      - name: Push Docker Image to Private ECR
+        if: env.image_exists == 'false'
+        run: |
+          # Push with SHA tag
+          docker push ${{ env.FULL_IMAGE_NAME }}
+      
+          # Push latest tag
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+      
+          echo "✅ Image pushed successfully"
+          echo "Image URI: ${{ env.FULL_IMAGE_NAME }}"
+  
+      - name: Skip Build if Image Already Exists
+        if: env.image_exists == 'true'
+        run: |
+          echo "✅ Image with tag ${{ env.EXISTING_IMAGE_TAG }} already exists in ECR"
+          echo "Skipping build and push steps"
 
-        FULL_IMAGE_NAME="${{ env.ECR_REGISTRY }}/g1n7j8p0/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG"
 
-        # Set output for the next step
-        echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
-
-
-    # - name: Verify ECR image
-    #   env:
-    #     ECR_REGISTRY: public.ecr.aws/g1n7j8p0  # Your public ECR registry
-    #     ECR_REPOSITORY: servicenow_repo  # Your repository name
-    #     IMAGE_TAG: $FULL_IMAGE_NAME  # Your tag format
-    #   run: |
-    #     echo "🔄 Logging into Public ECR..."
-    #     aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
-
-    #     echo "Verifying ECR image..."
-    #     docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$FULL_IMAGE_NAME
-        
-    #     docker run -d -p 8081:8080 --name verify-ecr $ECR_REGISTRY/$ECR_REPOSITORY:$FULL_IMAGE_NAME
-    #     sleep 60
-        
-    #     if curl -f http://localhost:8081/health; then
-    #       echo "✅ ECR image verified"
-    #     else
-    #       echo "❌ ECR image verification failed"
-    #       docker logs verify-ecr
-    #       exit 1
-    #     fi
-        
-    #     docker stop verify-ecr && docker rm verify-ecr
+    - name: Verify ECR image
+      if: env.image_exists == 'false' || env.image_exists == 'true'
+      env:
+        IMAGE_TO_TEST: ${{ env.image_exists == 'true' && format('{0}/{1}:{2}', env.ECR_REGISTRY, env.ECR_REPOSITORY, env.EXISTING_IMAGE_TAG) || env.FULL_IMAGE_NAME }}
+      run: |
+        echo "🔄 Logging into ECR..."
+        aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+        docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+      
+        echo "📦 Pulling image for verification: $IMAGE_TO_TEST"
+        docker pull $IMAGE_TO_TEST
+      
+        echo "🚀 Running container for health check..."
+        # Run container in background
+        docker run -d \
+          -p 8080:8080 \
+          --name verify-ecr-container \
+          $IMAGE_TO_TEST
+      
+        # Wait for container to start
+        sleep 60
+      
+        echo "🏥 Performing health check..."
+        if curl -s -f http://localhost:8080/health; then
+          echo "✅ ECR image verification successful"
+          echo "Health check passed"
+        else
+          echo "❌ ECR image verification failed"
+          echo "Container logs:"
+          docker logs verify-ecr-container
+        # Try alternative health endpoints
+          echo "Trying alternative health endpoints..."
+          curl -f http://localhost:8080/ || \
+          curl -f http://localhost:8080/health || \
+          curl -f http://localhost:8080/api/info|| exit 1
+        fi
+      
+        # Cleanup
+        echo "🧹 Cleaning up verification container..."
+        docker stop verify-ecr-container 2>/dev/null || true
+        docker rm verify-ecr-container 2>/dev/null || true   
 
   # 2. 部署基础设施 VPC（第一次）
   deploy-infrastructure-vpc-stack:
