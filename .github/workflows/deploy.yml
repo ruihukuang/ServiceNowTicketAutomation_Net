@@ -12,9 +12,8 @@ permissions:
 env:
   ECR_REGISTRY: public.ecr.aws
   ECR_REPOSITORY: ${{ secrets.RESPOSITORY_NAME }} 
-  TEMPLATE_BUCKET: "my-cfn-templates-bucket-7-12-2025"
+  #TEMPLATE_BUCKET: "my-cfn-templates-bucket-7-12-2025"
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  STACK_NAME: servicenow-automation-production
   EnvironmentName: production
 
 jobs:
@@ -126,73 +125,74 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
         aws-region: ${{ secrets.REGION }}
 
-    - name: Upload Nested Templates to S3
-      run: |
-        echo "📤 Uploading nested CloudFormation templates to S3..."
+    # - name: Upload Nested Templates to S3
+    #   run: |
+    #     echo "📤 Uploading nested CloudFormation templates to S3..."
         
-        # Create S3 bucket if it doesn't exist
-        if ! aws s3api head-bucket --bucket $TEMPLATE_BUCKET 2>/dev/null; then
-          echo "🪣 Creating S3 bucket: $TEMPLATE_BUCKET"
-          aws s3api create-bucket \
-            --bucket $TEMPLATE_BUCKET \
-            --region $AWS_REGION \
-            --create-bucket-configuration LocationConstraint=$AWS_REGION
+    #     # Create S3 bucket if it doesn't exist
+    #     if ! aws s3api head-bucket --bucket $TEMPLATE_BUCKET 2>/dev/null; then
+    #       echo "🪣 Creating S3 bucket: $TEMPLATE_BUCKET"
+    #       aws s3api create-bucket \
+    #         --bucket $TEMPLATE_BUCKET \
+    #         --region $AWS_REGION \
+    #         --create-bucket-configuration LocationConstraint=$AWS_REGION
 
-              # Apply bucket policy using AWS CLI
-             aws s3api put-bucket-policy \
-               --bucket $TEMPLATE_BUCKET \
-               --policy "{
-                    \"Version\": \"2012-10-17\",
-                    \"Statement\": [
-                    {
-                     \"Effect\": \"Allow\",
-                      \"Principal\": {
-                      \"Service\": \"cloudformation.amazonaws.com\"
-                    },
-                    \"Action\": \"s3:GetObject\",
-                    \"Resource\": \"arn:aws:s3:::${TEMPLATE_BUCKET}/*\"
-                  }
-                ]
-              }"
+    #           # Apply bucket policy using AWS CLI
+    #          aws s3api put-bucket-policy \
+    #            --bucket $TEMPLATE_BUCKET \
+    #            --policy "{
+    #                 \"Version\": \"2012-10-17\",
+    #                 \"Statement\": [
+    #                 {
+    #                  \"Effect\": \"Allow\",
+    #                   \"Principal\": {
+    #                   \"Service\": \"cloudformation.amazonaws.com\"
+    #                 },
+    #                 \"Action\": \"s3:GetObject\",
+    #                 \"Resource\": \"arn:aws:s3:::${TEMPLATE_BUCKET}/*\"
+    #               }
+    #             ]
+    #           }"
   
-         fi
+    #      fi
 
-        # Upload all nested templates
-        echo "📄 Uploading vpc-isolated.yaml..."
-        aws s3 cp infrastructure/vpc-isolated.yaml s3://$TEMPLATE_BUCKET/vpc-isolated.yaml \
-          --content-type "text/yaml" \
-          --cache-control "max-age=0, no-cache"
+    #     # Upload all nested templates
+    #     echo "📄 Uploading vpc-isolated.yaml..."
+    #     aws s3 cp infrastructure/vpc-isolated.yaml s3://$TEMPLATE_BUCKET/vpc-isolated.yaml \
+    #       --content-type "text/yaml" \
+    #       --cache-control "max-age=0, no-cache"
         
-        echo "📄 Uploading ecs-cluster-vpce.yaml..."
-        aws s3 cp infrastructure/ecs-cluster-vpce.yaml s3://$TEMPLATE_BUCKET/ecs-cluster-vpce.yaml \
-          --content-type "text/yaml" \
-          --cache-control "max-age=0, no-cache"
+    #     echo "📄 Uploading ecs-cluster-vpce.yaml..."
+    #     aws s3 cp infrastructure/ecs-cluster-vpce.yaml s3://$TEMPLATE_BUCKET/ecs-cluster-vpce.yaml \
+    #       --content-type "text/yaml" \
+    #       --cache-control "max-age=0, no-cache"
         
-        echo "📄 Uploading alb-https.yaml..."
-        aws s3 cp infrastructure/alb-https.yaml s3://$TEMPLATE_BUCKET/alb-https.yaml \
-          --content-type "text/yaml" \
-          --cache-control "max-age=0, no-cache"
+    #     echo "📄 Uploading alb-https.yaml..."
+    #     aws s3 cp infrastructure/alb-https.yaml s3://$TEMPLATE_BUCKET/alb-https.yaml \
+    #       --content-type "text/yaml" \
+    #       --cache-control "max-age=0, no-cache"
         
-        echo "📄 Uploading ecs-service-private.yaml..."
-        aws s3 cp infrastructure/ecs-service-private.yaml s3://$TEMPLATE_BUCKET/ecs-service-private.yaml \
-          --content-type "text/yaml" \
-          --cache-control "max-age=0, no-cache"
+    #     echo "📄 Uploading ecs-service-private.yaml..."
+    #     aws s3 cp infrastructure/ecs-service-private.yaml s3://$TEMPLATE_BUCKET/ecs-service-private.yaml \
+    #       --content-type "text/yaml" \
+    #       --cache-control "max-age=0, no-cache"
         
-        # Verify uploads
-        echo "✅ Verifying uploads..."
-        aws s3 ls s3://$TEMPLATE_BUCKET/ --recursive --human-readable
+    #     # Verify uploads
+    #     echo "✅ Verifying uploads..."
+    #     aws s3 ls s3://$TEMPLATE_BUCKET/ --recursive --human-readable
     
-    - name: Deploy CloudFormation Stack
+    - name: Deploy CloudFormation VPC Stack
+      env:
+        STACK_NAME="VPC Stack"
       run: |
         
         echo "🚀 Deploying infrastructure for production..."
         
         aws cloudformation deploy \
           --stack-name $STACK_NAME \
-          --template-file infrastructure/main.yaml \
+          --template-file infrastructure/vpc-isolated.yaml \
           --parameter-overrides \
             EnvironmentName=$EnvironmentName \
-            DomainName=api.$EnvironmentName.servicenow-automation.com \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --region ${{ secrets.REGION }} \
           --no-fail-on-empty-changeset
@@ -200,10 +200,10 @@ jobs:
         # 等待栈创建完成
         echo "⏳ Waiting for stack creation..."
         aws cloudformation wait stack-create-complete \
-          --stack-name "servicenow-automation-production" \
+          --stack-name $STACK_NAME  \
           --region ${{ secrets.REGION }}
         
-        echo "✅ Infrastructure deployed successfully!"
+        echo "✅ Infrastructure $STACK_NAME deployed successfully!"
 
   # 4. 更新 ECS 服务使用新镜像
   update-ecs-service:
