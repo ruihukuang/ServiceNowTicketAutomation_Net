@@ -88,6 +88,8 @@ jobs:
         docker build \
           -t ${{ env.FULL_IMAGE_NAME }} \
           -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest \
+          .
+        echo "✅ Docker image built and tagged"
       
     - name: Push Docker Image to Private ECR
       if: env.image_exists == 'false'
