@@ -188,7 +188,7 @@ jobs:
         echo "ECSCluster_exists=true" >> $GITHUB_OUTPUT
         else
         echo "ECSCluster_exists=false" >> $GITHUB_OUTPUT
-    
+        fi
 
     - name: Deploy CloudFormation ECS cluster Stack
       if: steps.check_ecs.outputs.ECSCluster_exists == 'false'
