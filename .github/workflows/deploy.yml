@@ -227,31 +227,44 @@ jobs:
         echo "ECS Security Group: $ECS_SG_ID"
         echo "Private Route Table: $PRIVATE_RT_ID"
 
-        # Verify the subnet string is properly formatted
-        echo "🔍 Verifying subnet format..."
-        if [[ $PRIVATE_SUBNETS == *","* ]]; then
-          echo "✅ Subnets are comma-separated: $PRIVATE_SUBNETS"
-        else
-        echo "⚠️ Subnets may not be properly comma-separated"
-        # If not comma-separated, fix it
-        PRIVATE_SUBNETS="${PRIVATE_SUBNETS// /,}"  # Replace spaces with commas
-        echo "🔧 Fixed subnets: $PRIVATE_SUBNETS"
-        fi
+        # Create parameters JSON file
+        cat > parameters.json << EOF
+        [
+         {
+          "ParameterKey": "EnvironmentName",
+          "ParameterValue": "$ENVIRONMENT"
+         },
+         {
+          "ParameterKey": "VpcId",
+          "ParameterValue": "$VPC_ID"
+         },
+         {
+          "ParameterKey": "PrivateSubnetIds",
+          "ParameterValue": "$PRIVATE_SUBNETS"
+         },
+         {
+          "ParameterKey": "ECSSecurityGroupId",
+          "ParameterValue": "$ECS_SG_ID"
+         },
+        {
+          "ParameterKey": "PrivateRouteTableId",
+          "ParameterValue": "$PRIVATE_RT_ID"
+         }
+        ]
+        EOF
+    
+        echo "📄 Parameters JSON:"
+        cat parameters.json
         
         # Try to create stack with debug output
         set +e
         aws cloudformation create-stack \
           --stack-name test-debug \
           --template-body file://infrastructure/ecs-cluster-vpce.yaml \
-          --parameters \
-            ParameterKey=EnvironmentName,ParameterValue=$ENVIRONMENT \
-            ParameterKey=VpcId,ParameterValue=$VPC_ID \
-            ParameterKey=PrivateSubnetIds,ParameterValue="$PRIVATE_SUBNETS" \
-            ParameterKey=ECSSecurityGroupId,ParameterValue=$ECS_SG_ID \
-            ParameterKey=PrivateRouteTableId,ParameterValue=$PRIVATE_RT_ID \
-            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --region $AWS_REGION \
-            --output text 2>&1 | tee cf-error.log
+          --parameter-overrides file://parameters.json \
+          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+          --region $AWS_REGION \
+          --output text 2>&1 | tee cf-error.log
     
         echo "🔍 Error log:"
         cat cf-error.log
