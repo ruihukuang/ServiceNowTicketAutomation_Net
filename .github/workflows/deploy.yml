@@ -137,6 +137,7 @@ jobs:
         echo "vpc_exists=true" >> $GITHUB_OUTPUT
         else
         echo "vpc_exists=false" >> $GITHUB_OUTPUT
+        fi
     
     - name: Deploy CloudFormation VPC Stack
       if: steps.check_vpc.outputs.vpc_exists == 'false'
