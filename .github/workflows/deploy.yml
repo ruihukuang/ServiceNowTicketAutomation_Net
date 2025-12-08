@@ -297,19 +297,6 @@ jobs:
         echo "📄 Parameters JSON:"
         cat parameters.json
         
-        # Try to create stack with debug output
-        set +e
-        aws cloudformation create-stack \
-          --stack-name test-debug \
-          --template-body file://infrastructure/ecs-cluster-vpce.yaml \
-          --parameters file://parameters.json \
-          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-          --region $AWS_REGION \
-          --output text 2>&1 | tee cf-error.log
-    
-        echo "🔍 Error log:"
-        cat cf-error.log
-
         # Try to create ecs stack 
         aws cloudformation create-stack \
           --stack-name $ECS_CLUSTER_STACK\
@@ -325,8 +312,17 @@ jobs:
           --stack-name $ECS_CLUSTER_STACK \
           --region ${{ secrets.REGION }}
         
-        echo "✅ Infrastructure $ECS_CLUSTER_STACK deployed successfully!"    
-
+        if [ $? -eq 0 ]; then
+          echo "✅ Infrastructure $ECS_CLUSTER_STACK deployed successfully!"
+        else
+          echo "❌ Stack creation failed. Checking events..."  
+          aws cloudformation describe-stack-events \
+            --stack-name $ECS_CLUSTER_STACK \
+            --region $AWS_REGION \
+            --query "StackEvents[?ResourceStatus=='CREATE_FAILED']" \
+            --output table
+          exit 1
+        fi
 
   # 4. 更新 ECS 服务使用新镜像
   update-ecs-service:
