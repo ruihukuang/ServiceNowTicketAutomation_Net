@@ -227,18 +227,23 @@ jobs:
         echo "ECS Security Group: $ECS_SG_ID"
         echo "Private Route Table: $PRIVATE_RT_ID"
         
-        aws cloudformation deploy \
-          --stack-name $ECS_CLUSTER_STACK \
-          --template-file infrastructure/ecs-cluster-vpce.yaml \
-          --parameter-overrides \
-            EnvironmentName=$ENVIRONMENT \
-            VpcId=$VPC_ID \
-            PrivateSubnetIds=$PRIVATE_SUBNETS \
-            ECSSecurityGroupId=$ECS_SG_ID \
-            PrivateRouteTableId=$PRIVATE_RT_ID \
+        # Try to create stack with debug output
+        set +e
+        aws cloudformation create-stack \
+          --stack-name test-debug \
+          --template-body file://infrastructure/ecs-cluster-vpce.yaml \
+          --parameters \
+            ParameterKey=EnvironmentName,ParameterValue=$ENVIRONMENT \
+            ParameterKey=VpcId,ParameterValue=$VPC_ID \
+            ParameterKey=PrivateSubnetIds,ParameterValue="$PRIVATE_SUBNETS" \
+            ParameterKey=ECSSecurityGroupId,ParameterValue=$ECS_SG_ID \
+            ParameterKey=PrivateRouteTableId,ParameterValue=$PRIVATE_RT_ID \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --region $AWS_REGION \
-            --no-fail-on-empty-changeset
+            --output text 2>&1 | tee cf-error.log
+    
+        echo "🔍 Error log:"
+        cat cf-error.log
         
         # 等待栈创建完成
         echo "⏳ Waiting for stack creation..."
