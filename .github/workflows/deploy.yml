@@ -232,7 +232,7 @@ jobs:
         [
          {
           "ParameterKey": "EnvironmentName",
-          "ParameterValue": "$ENVIRONMENT"
+          "ParameterValue": "$EnvironmentName"
          },
          {
           "ParameterKey": "VpcId",
