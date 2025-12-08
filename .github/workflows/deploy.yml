@@ -109,8 +109,8 @@ jobs:
         
     #     docker stop verify-ecr && docker rm verify-ecr
 
-  # 3. 部署基础设施（第一次）
-  deploy-infrastructure:
+  # 2. 部署基础设施 VPC（第一次）
+  deploy-infrastructure-vpc-stack:
     needs: build-push-to-ecr
     runs-on: ubuntu-latest
 
@@ -204,6 +204,82 @@ jobs:
           --region ${{ secrets.REGION }}
         
         echo "✅ Infrastructure $STACK_NAME deployed successfully!"
+
+  # 3. 部署基础设施 ECS Cluster（第一次）
+  deploy-infrastructure-ecs-stack:
+    needs: build-push-to-ecr
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
+        aws-region: ${{ secrets.REGION }}
+
+    - name: Deploy CloudFormation ECS cluster Stack
+      env:
+        STACK_NAME: "ECS-Cluster-Stack"
+      run: |
+        
+        echo "🚀 Deploying infrastructure for production..."
+
+          # Get outputs from VPC stack
+        VPC_ID=$(aws cloudformation describe-stacks \
+          --stack-name servicenow-vpc-production \
+          --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue" \
+          --output text \
+          --region $AWS_REGION)
+      
+        PRIVATE_SUBNETS=$(aws cloudformation describe-stacks \
+          --stack-name servicenow-vpc-production \
+          --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnetIds'].OutputValue" \
+          --output text \
+          --region $AWS_REGION)
+      
+        ECS_SG_ID=$(aws cloudformation describe-stacks \
+          --stack-name servicenow-vpc-production \
+          --query "Stacks[0].Outputs[?OutputKey=='ECSSecurityGroupId'].OutputValue" \
+          --output text \
+          --region $AWS_REGION)
+      
+        PRIVATE_RT_ID=$(aws cloudformation describe-stacks \
+          --stack-name servicenow-vpc-production \
+          --query "Stacks[0].Outputs[?OutputKey=='PrivateRouteTableId'].OutputValue" \
+          --output text \
+          --region $AWS_REGION)
+      
+        echo "📊 Retrieved parameters:"
+        echo "VPC ID: $VPC_ID"
+        echo "Private Subnets: $PRIVATE_SUBNETS"
+        echo "ECS Security Group: $ECS_SG_ID"
+        echo "Private Route Table: $PRIVATE_RT_ID"
+        
+        aws cloudformation deploy \
+          --stack-name $ECS_CLUSTER_STACK_NAME \
+          --template-file infrastructure/ecs-cluster-vpce.yaml \
+          --parameter-overrides \
+            EnvironmentName=$ENVIRONMENT \
+            VpcId=$VPC_ID \
+            PrivateSubnetIds=$PRIVATE_SUBNETS \
+            ECSSecurityGroupId=$ECS_SG_ID \
+            PrivateRouteTableId=$PRIVATE_RT_ID \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --region $AWS_REGION \
+            --no-fail-on-empty-changeset
+        
+        # 等待栈创建完成
+        echo "⏳ Waiting for stack creation..."
+        aws cloudformation wait stack-create-complete \
+          --stack-name $STACK_NAME  \
+          --region ${{ secrets.REGION }}
+        
+        echo "✅ Infrastructure $STACK_NAME deployed successfully!"    
+
 
   # 4. 更新 ECS 服务使用新镜像
   update-ecs-service:
