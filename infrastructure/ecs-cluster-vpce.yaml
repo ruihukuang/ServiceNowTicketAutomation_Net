@@ -12,7 +12,7 @@ Parameters:
     Type: AWS::EC2::SecurityGroup::Id
     Description: 'ECS Security Group ID from VPC stack'
   PrivateRouteTableId:
-    Type: AWS::EC2::RouteTable::Id
+    Type: AWS::EC2::RouteTable
     Description: 'Private Route Table ID from VPC stack'
   
 
