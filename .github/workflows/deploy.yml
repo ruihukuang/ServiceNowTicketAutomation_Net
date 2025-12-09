@@ -237,6 +237,18 @@ jobs:
         
         echo "🚀 Deploying infrastructure for production..."
 
+            # 步骤1: 确保 ECS 服务链接角色存在
+        echo "🔍 Checking ECS Service Linked Role..."
+        if ! aws iam get-role --role-name AWSServiceRoleForECS --region $AWS_REGION 2>/dev/null; then
+          echo "📝 Creating ECS Service Linked Role..."
+          aws iam create-service-linked-role \
+            --aws-service-name ecs.amazonaws.com \
+            --region $AWS_REGION
+          echo "✅ ECS Service Linked Role created."
+        else
+          echo "✅ ECS Service Linked Role already exists."
+        fi
+
           # Get outputs from VPC stack
         VPC_ID=$(aws cloudformation describe-stacks \
           --stack-name  $VPC_STACK\
