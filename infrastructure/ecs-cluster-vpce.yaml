@@ -19,9 +19,18 @@ Parameters:
   
 
 Resources:
+
+  # ECS 服务链接角色（必须）
+  ECSServiceRole:
+    Type: AWS::IAM::ServiceLinkedRole
+    Properties:
+      AWSServiceName: ecs.amazonaws.com
+      Description: Service-linked role for Amazon ECS
+
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
+    DependsOn: ECSServiceRole  # 确保先创建角色
     Properties:
       ClusterName: !Sub ${EnvironmentName}-cluster
       CapacityProviders:
