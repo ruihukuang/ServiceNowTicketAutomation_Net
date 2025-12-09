@@ -16,13 +16,23 @@ Parameters:
     Description: 'Private Route Table ID from VPC stack (e.g., rtb-xxxxxx)'
     AllowedPattern: '^rtb-[a-z0-9]{8,17}$'  # ADDED: Validation pattern
     ConstraintDescription: 'Must be a valid Route Table ID (rtb-xxxxxx)'
+
+    CreateServiceLinkedRole:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: "Whether to create the ECS service linked role"
+
+Conditions:
+  ShouldCreateRole: !Equals [!Ref CreateServiceLinkedRole, "true"]
   
 
 Resources:
 
-  # ECS 服务链接角色（必须）
-  ECSServiceRoleServiceNow:
+  # 有条件地创建服务链接角色
+  ECSServiceRole:
     Type: AWS::IAM::ServiceLinkedRole
+    Condition: ShouldCreateRole
     Properties:
       AWSServiceName: ecs.amazonaws.com
       Description: Service-linked role for Amazon ECS
@@ -30,7 +40,7 @@ Resources:
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
-    DependsOn: ECSServiceRoleServiceNow # 确保先创建角色
+    DependsOn: !If [ShouldCreateRole, ECSServiceRole, !Ref "AWS::NoValue"]
     Properties:
       ClusterName: !Sub ${EnvironmentName}-cluster
       CapacityProviders:
