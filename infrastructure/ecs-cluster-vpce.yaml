@@ -17,33 +17,12 @@ Parameters:
     AllowedPattern: '^rtb-[a-z0-9]{8,17}$'  # ADDED: Validation pattern
     ConstraintDescription: 'Must be a valid Route Table ID (rtb-xxxxxx)'
 
-  CreateServiceLinkedRole:
-    Type: String
-    Default: "false"
-    AllowedValues: ["true", "false"]
-    Description: "Whether to create the ECS service linked role"
-
-Conditions:
-  ShouldCreateRole: !Equals [!Ref CreateServiceLinkedRole, "true"]
   
-
 Resources:
-
-  # 有条件地创建服务链接角色
-  ECSServiceRole:
-    Type: AWS::IAM::ServiceLinkedRole
-    Condition: ShouldCreateRole
-    Properties:
-      AWSServiceName: ecs.amazonaws.com
-      Description: Service-linked role for Amazon ECS
 
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
-    DependsOn:  !If # <-- Revert to !If, but ensure the structure is valid YAML
-      - ShouldCreateRole
-      - [ECSServiceRole] # Return a list containing the dependency (Valid type)
-      - [] # Return an empty list if the role is not created (Valid type)
     Properties:
       ClusterName: !Sub ${EnvironmentName}-cluster
       CapacityProviders:
@@ -57,7 +36,7 @@ Resources:
         - Key: Network
           Value: private-vpce
 
-  # VPC Endpoints (关键！ECS通过这些端点访问AWS服务)
+  # VPC Endpoints (关键！ECS通过这些端点访问AWS服务) (Critical for Private Network Connectivity)
 
   # 1. ECR API Endpoint (用于认证)
   ECREndpoint:
@@ -89,7 +68,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ecr-dkr-endpoint
 
-  # 3. S3 Gateway Endpoint (ECR镜像层存储在S3)
+  # 3. S3 Gateway Endpoint (ECR镜像层存储在S3) (Image Layer Storage)
   S3Endpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -141,6 +120,21 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-secretsmanager-endpoint
 
+# 6. STS Endpoint (Highly Recommended for Fargate Task Credentials)
+  STSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sts
+      VpcEndpointType: Interface
+      SubnetIds: !Ref PrivateSubnetIds
+      SecurityGroupIds:
+        - !Ref ECSSecurityGroupId
+      PrivateDnsEnabled: true
+    Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-sts-endpoint
+
   # 6. SSM Endpoint (可选，用于调试)
   SSMEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -169,4 +163,5 @@ Outputs:
       !Ref S3Endpoint,
       !Ref CloudWatchEndpoint,
       !Ref SecretsManagerEndpoint
+      !Ref STSEndpoint # Added to Outputs
     ]]
