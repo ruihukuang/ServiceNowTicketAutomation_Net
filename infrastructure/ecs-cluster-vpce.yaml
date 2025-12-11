@@ -40,7 +40,10 @@ Resources:
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
-    DependsOn:  ECSServiceRole # If true, DependsOn is the string "ECSServiceRole"
+    DependsOn:  !If # <-- Revert to !If, but ensure the structure is valid YAML
+      - ShouldCreateRole
+      - [ECSServiceRole] # Return a list containing the dependency (Valid type)
+      - [] # Return an empty list if the role is not created (Valid type)
     Properties:
       ClusterName: !Sub ${EnvironmentName}-cluster
       CapacityProviders:
