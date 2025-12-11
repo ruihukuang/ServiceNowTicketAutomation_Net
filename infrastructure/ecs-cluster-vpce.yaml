@@ -146,7 +146,7 @@ Resources:
       SecurityGroupIds:
         - !Ref ECSSecurityGroupId  # 修改为引用参数
       PrivateDnsEnabled: true
-      Tags:
+    Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ssm-endpoint
 
