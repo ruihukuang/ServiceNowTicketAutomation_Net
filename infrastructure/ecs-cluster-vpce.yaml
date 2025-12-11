@@ -40,7 +40,10 @@ Resources:
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
-    DependsOn: !If [ShouldCreateRole, ECSServiceRole, !Ref "AWS::NoValue"]
+    DependsOn: !If 
+      - ShouldCreateRole
+      - ECSServiceRole # If true, DependsOn is the string "ECSServiceRole"
+      - !Ref "AWS::NoValue" # If false, use NoValue, which will omit the DependsOn attribute
     Properties:
       ClusterName: !Sub ${EnvironmentName}-cluster
       CapacityProviders:
