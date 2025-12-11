@@ -86,7 +86,7 @@ Resources:
               - s3:GetObject
               - s3:ListBucket
             Resource: '*'
-        Tags:
+      Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-s3-endpoint
 
