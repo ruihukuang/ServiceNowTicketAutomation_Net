@@ -162,6 +162,6 @@ Outputs:
       !Ref ECRDkrEndpoint,
       !Ref S3Endpoint,
       !Ref CloudWatchEndpoint,
-      !Ref SecretsManagerEndpoint
+      !Ref SecretsManagerEndpoint,
       !Ref STSEndpoint # Added to Outputs
     ]]
