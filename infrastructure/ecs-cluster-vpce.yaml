@@ -17,7 +17,7 @@ Parameters:
     AllowedPattern: '^rtb-[a-z0-9]{8,17}$'  # ADDED: Validation pattern
     ConstraintDescription: 'Must be a valid Route Table ID (rtb-xxxxxx)'
 
-    CreateServiceLinkedRole:
+  CreateServiceLinkedRole:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
