@@ -10,6 +10,7 @@ Parameters:
     Type: CommaDelimitedList
   DomainName:
     Type: String
+    Default: api.servicenow.com  # 改成您的域名
   ContainerPort:
     Type: Number
     Default: 8080
