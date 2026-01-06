@@ -379,9 +379,9 @@ jobs:
           --output text \
           --region $AWS_REGION)
       
-        PRIVATE_SUBNETS=$(aws cloudformation describe-stacks \
+        PUBLIC_SUBNETS=$(aws cloudformation describe-stacks \
           --stack-name $VPC_STACK \
-          --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnetIds'].OutputValue" \
+          --query "Stacks[0].Outputs[?OutputKey=='PublicSubnetIds'].OutputValue" \
           --output text \
           --region $AWS_REGION)
       
@@ -394,7 +394,7 @@ jobs:
       
         echo "📊 Retrieved parameters:"
         echo "VPC ID: $VPC_ID"
-        echo "Private Subnets: $PRIVATE_SUBNETS"
+        echo "Public Subnets: $PUBLIC_SUBNETS"
         echo "Application Load Balancer Security Group: $ApplicationLB_SG_ID"
 
 
@@ -410,8 +410,8 @@ jobs:
           "ParameterValue": "$VPC_ID"
          },
          {
-          "ParameterKey": "PrivateSubnetIds",
-          "ParameterValue": "$PRIVATE_SUBNETS"
+          "ParameterKey": "PublicSubnetIds",
+          "ParameterValue": "$PUBLIC_SUBNETS"
          },
          {
           "ParameterKey": "ALBSecurityGroupId",
