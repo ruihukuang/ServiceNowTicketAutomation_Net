@@ -372,7 +372,7 @@ jobs:
           DOMAIN="${{ github.event.inputs.domain_name }}"
           echo "Checking availability for: $DOMAIN"
           
-          RESPONSE=$(aws route53domains check-domain-availability --domain-name "$DOMAIN" -region us-east-1)
+          RESPONSE=$(aws route53domains check-domain-availability --domain-name "$DOMAIN" --region us-east-1)
           AVAILABLE=$(echo $RESPONSE | jq -r '.Availability')
           
           echo "Domain availability: $AVAILABLE"
