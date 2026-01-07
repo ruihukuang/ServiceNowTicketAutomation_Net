@@ -6,10 +6,14 @@ Parameters:
   EnvironmentName:
     Type: String
     Default: "production"
+  VpcId:
+    Type: AWS::EC2::VPC::Id
   FullDomainName:
     Type: String
-    Default: "servicenow-app.com" # 🔴 请将 yourdomain.com 替换成您注册的真实域名
+    Default: "service-app.square.site" # 🔴 请将 yourdomain.com 替换成您注册的真实域名
     Description: 'The full API domain name (e.g., api.example.com)'
+  VPCRegion: 
+    Type: String
 
 Resources:
   # 1. 使用您现有的域名创建托管区
@@ -23,6 +27,9 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
+      VPCs:
+        - VPCId: !Ref  VpcId
+          VPCRegion: !Ref  VPCRegion
 
   # 2. 为域名申请 ACM 证书
   SSLCertificate:
