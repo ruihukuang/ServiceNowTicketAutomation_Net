@@ -8,7 +8,7 @@ Parameters:
     Type: AWS::EC2::VPC::Id
   PublicSubnetIds:
     Type: CommaDelimitedList
-  DomainName:
+  RootDomain:
     Type: String
     Default: servicenow.com  # 改成您的域名
   ContainerPort:
