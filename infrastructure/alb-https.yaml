@@ -10,7 +10,7 @@ Parameters:
     Type: CommaDelimitedList
   DomainName:
     Type: String
-    Default: api.servicenow.com  # 改成您的域名
+    Default: servicenow.com  # 改成您的域名
   ContainerPort:
     Type: Number
     Default: 8080
@@ -33,6 +33,17 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
+  
+    # DNS Record for ALB
+  ALBDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Sub ${RootDomain}.
+      Name: !Sub api.${RootDomain}
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ApplicationLoadBalancer.DNSName
+        HostedZoneId: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
 
   # Target Group
   TargetGroup:
