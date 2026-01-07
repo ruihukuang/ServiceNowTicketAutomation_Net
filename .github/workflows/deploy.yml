@@ -20,6 +20,7 @@ env:
   EnvironmentName: production
   VPC_STACK: "VPC-Stack"
   ECS_CLUSTER_STACK: "ECS-Cluster-Stack"
+  DOMAIN_CONTACT_EMAIL: ${{ secrets.DOMAIN_CONTACT_EMAIL }}
   Route53_STACK: "Route53-Stack"
   Application_Load_Balancer_STACK: "Application-Load-Balancer-Stack"
   ECS_SERVICE_STACK: "ECS-Service-Stack"
@@ -392,16 +393,15 @@ jobs:
         run: |
           cat > contact-info.json << EOF
           {
-            "FirstName": "DevOps",
-            "LastName": "Team",
-            "ContactType": "COMPANY",
-            "OrganizationName": "My Company",
-            "AddressLine1": "123 Tech Street",
+            "FirstName": "Ruihu",
+            "LastName": "Kuang",
+            "ContactType": "Person",
+            "AddressLine1": "7/42-44 Balitmore street belfield",
             "City": "Sydney",
             "State": "NSW",
             "CountryCode": "AU",
-            "ZipCode": "2000",
-            "PhoneNumber": "+61.283001234",
+            "ZipCode": "2191",
+            "PhoneNumber": "+61435086993",
             "Email": "${{ env.DOMAIN_CONTACT_EMAIL }}"
           }
           EOF
@@ -419,8 +419,8 @@ jobs:
           # 注册域名（1年）
           aws route53domains register-domain \
             --domain-name "$DOMAIN" \
-            --duration-in-years 1 \
-            --auto-renew true \
+            --duration-in-years 3 \
+            --auto-renew false \
             --admin-contact file://contact-info.json \
             --registrant-contact file://contact-info.json \
             --tech-contact file://contact-info.json \
