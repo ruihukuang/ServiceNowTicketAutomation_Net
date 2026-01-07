@@ -2,7 +2,11 @@ name: Sync GHCR to ECR and Deploy
 
 on:
   workflow_dispatch:
-
+    inputs:
+      domain_name:
+        description: 'Domain name to register (e.g., myapp-alb.com)'
+        required: true
+        default: 'servicenow.com'
 
 permissions:
   id-token: write   # This is required for requesting the JWT
@@ -339,10 +343,153 @@ jobs:
           exit 1
         fi
 
-  # 4. Route 53
+  register-domain:
+    needs: deploy-infrastructure-ecs-stack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install AWS CLI v2
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install --update
+          aws --version
+
+      - name: Check domain availability
+        id: check-domain
+        run: |
+          DOMAIN="${{ github.event.inputs.domain_name }}"
+          echo "Checking availability for: $DOMAIN"
+          
+          RESPONSE=$(aws route53domains check-domain-availability --domain-name "$DOMAIN")
+          AVAILABLE=$(echo $RESPONSE | jq -r '.Availability')
+          
+          echo "Domain availability: $AVAILABLE"
+          
+          if [ "$AVAILABLE" == "AVAILABLE" ]; then
+            echo "✅ Domain is available"
+            echo "domain_available=true" >> $GITHUB_OUTPUT
+          elif [ "$AVAILABLE" == "UNAVAILABLE" ]; then
+            echo "❌ Domain is not available"
+            echo "domain_available=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "⚠️ Domain availability is: $AVAILABLE"
+            echo "domain_available=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Prepare contact information JSON
+        run: |
+          cat > contact-info.json << EOF
+          {
+            "FirstName": "DevOps",
+            "LastName": "Team",
+            "ContactType": "COMPANY",
+            "OrganizationName": "My Company",
+            "AddressLine1": "123 Tech Street",
+            "City": "Sydney",
+            "State": "NSW",
+            "CountryCode": "AU",
+            "ZipCode": "2000",
+            "PhoneNumber": "+61.283001234",
+            "Email": "${{ env.DOMAIN_CONTACT_EMAIL }}"
+          }
+          EOF
+          echo "Contact info prepared:"
+          cat contact-info.json
+
+      - name: Register domain
+        id: register-domain
+        if: steps.check-domain.outputs.domain_available == 'true'
+        run: |
+          DOMAIN="${{ github.event.inputs.domain_name }}"
+          
+          echo "Registering domain: $DOMAIN"
+          
+          # 注册域名（1年）
+          aws route53domains register-domain \
+            --domain-name "$DOMAIN" \
+            --duration-in-years 1 \
+            --auto-renew true \
+            --admin-contact file://contact-info.json \
+            --registrant-contact file://contact-info.json \
+            --tech-contact file://contact-info.json \
+            --privacy-protect-admin-contact false \
+            --privacy-protect-registrant-contact false \
+            --privacy-protect-tech-contact false
+          
+          echo "✅ Domain registration initiated for: $DOMAIN"
+          echo "domain_name=$DOMAIN" >> $GITHUB_OUTPUT
+
+      - name: Wait for domain registration (with polling)
+        if: steps.register-domain.outputs.domain_name
+        run: |
+          DOMAIN="${{ steps.register-domain.outputs.domain_name }}"
+          echo "Waiting for domain registration to complete..."
+          
+          # 最多等待 10 分钟（实际注册可能需要数小时到数天）
+          for i in {1..60}; do
+            STATUS=$(aws route53domains get-domain-detail --domain-name "$DOMAIN" --query 'Status' --output text 2>/dev/null || echo "PENDING")
+            
+            echo "Attempt $i/60: Domain status = $STATUS"
+            
+            if [ "$STATUS" == "SUCCESS" ] || [ "$STATUS" == "COMPLETE" ]; then
+              echo "✅ Domain registration completed!"
+              break
+            elif [ "$STATUS" == "FAILED" ]; then
+              echo "❌ Domain registration failed"
+              exit 1
+            fi
+            
+            if [ $i -eq 60 ]; then
+              echo "⚠️ Registration still in progress. It may take hours/days to complete."
+              echo "You can check manually with: aws route53domains get-domain-detail --domain-name $DOMAIN"
+            fi
+            
+            sleep 10
+          done
+
+      - name: Create Route 53 Hosted Zone
+        if: steps.register-domain.outputs.domain_name
+        run: |
+          DOMAIN="${{ steps.register-domain.outputs.domain_name }}"
+          
+          echo "Creating Hosted Zone for: $DOMAIN"
+          
+          # 创建托管区
+          HOSTED_ZONE_RESPONSE=$(aws route53 create-hosted-zone \
+            --name "$DOMAIN" \
+            --caller-reference "$DOMAIN-$(date +%s)" \
+            --hosted-zone-config "Comment=Created by GitHub Actions,PrivateZone=false")
+          
+          HOSTED_ZONE_ID=$(echo $HOSTED_ZONE_RESPONSE | jq -r '.HostedZone.Id' | cut -d'/' -f3)
+          NAME_SERVERS=$(echo $HOSTED_ZONE_RESPONSE | jq -r '.DelegationSet.NameServers | join(",")')
+          
+          echo "✅ Hosted Zone created: $HOSTED_ZONE_ID"
+          echo "Name Servers: $NAME_SERVERS"
+          
+          # 保存到 GitHub Actions 输出
+          echo "hosted_zone_id=$HOSTED_ZONE_ID" >> $GITHUB_OUTPUT
+          echo "name_servers=$NAME_SERVERS" >> $GITHUB_OUTPUT
+          
+          # 注意：您需要将 Name Servers 配置到域名注册商处
+          # 对于 Route 53 注册的域名，这通常是自动的
+          echo "IMPORTANT: Ensure Name Servers are properly set at your registrar"
+
+  # 5. Route 53
 
    deploy-infrastructure-Route53-stack:
-    needs: deploy-infrastructure-ecs-stack
+    needs: register-domain
     runs-on: ubuntu-latest
 
     steps:
