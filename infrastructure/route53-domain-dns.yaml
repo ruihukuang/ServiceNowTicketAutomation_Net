@@ -1,4 +1,3 @@
-# 1-route53-standalone.yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Standalone Route 53 Hosted Zone and Certificate for future ALB'
 
@@ -10,56 +9,68 @@ Parameters:
     Type: AWS::EC2::VPC::Id
   FullDomainName:
     Type: String
-    Default: "service-app.square.site" # 🔴 请将 yourdomain.com 替换成您注册的真实域名
+    Default: "service-app.square.site"
     Description: 'The full API domain name (e.g., api.example.com)'
   VPCRegion: 
     Type: String
 
 Resources:
-  # 1. 使用您现有的域名创建托管区
-  # 注意：此模板假设您已拥有该域名。如需注册新域名，需先通过 AWS 控制台或 CLI 完成。
+  # 1. 托管区
   HostedZone:
     Type: AWS::Route53::HostedZone
     Properties:
-      Name: !Ref FullDomainName  # ✅ 正确：直接使用传入的域名
+      Name: !Ref FullDomainName
       HostedZoneConfig:
         Comment: !Sub "Hosted zone for ALB endpoints in ${EnvironmentName}"
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
       VPCs:
-        - VPCId: !Ref  VpcId
-          VPCRegion: !Ref  VPCRegion
+        - VPCId: !Ref VpcId
+          VPCRegion: !Ref VPCRegion
 
-  # 2. 为域名申请 ACM 证书
+  # 2. ACM 证书
   SSLCertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
       DomainName: !Ref FullDomainName
       ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref FullDomainName
+          ValidationDomain: !Ref FullDomainName
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
 
-  # 3. 证书验证记录
+  # 3. 使用 Custom Resource 等待证书验证记录可用
+  CertificateValidationWaiter:
+    Type: Custom::CertificateValidationWaiter
+    DependsOn: SSLCertificate
+    Properties:
+      ServiceToken: !GetAtt CertificateValidationLambda.Arn
+      CertificateArn: !Ref SSLCertificate
+      Timeout: 300
+
+  # 4. 证书验证记录（在等待后创建）
   CertificateValidationRecord:
     Type: AWS::Route53::RecordSet
+    DependsOn: CertificateValidationWaiter
     Properties:
       HostedZoneId: !Ref HostedZone
-      Name: !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Name
-      Type: !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Type
+      Name: !GetAtt CertificateValidationWaiter.ValidationRecordName
+      Type: !GetAtt CertificateValidationWaiter.ValidationRecordType
       TTL: 300
       ResourceRecords:
-        - !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Value
+        - !GetAtt CertificateValidationWaiter.ValidationRecordValue
 
-  # 4. 证书验证资源
+  # 5. 证书验证
   CertificateValidation:
     Type: AWS::CertificateManager::CertificateValidation
     DependsOn: CertificateValidationRecord
     Properties:
       CertificateArn: !Ref SSLCertificate
       ValidationRecordFqdns:
-        - !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Name
+        - !GetAtt CertificateValidationWaiter.ValidationRecordName
 
 Outputs:
   HostedZoneId:
