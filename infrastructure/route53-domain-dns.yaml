@@ -8,7 +8,7 @@ Parameters:
     Default: "production"
   FullDomainName:
     Type: String
-    Default: "api.servicenow.com" # 🔴 请将 yourdomain.com 替换成您注册的真实域名
+    Default: "servicenow-app.com" # 🔴 请将 yourdomain.com 替换成您注册的真实域名
     Description: 'The full API domain name (e.g., api.example.com)'
 
 Resources:
@@ -17,7 +17,7 @@ Resources:
   HostedZone:
     Type: AWS::Route53::HostedZone
     Properties:
-      Name: !Select [1, !Split ['.', !Ref FullDomainName, 2]] # 自动从完整域名中提取根域名
+      Name: !Ref FullDomainName  # ✅ 正确：直接使用传入的域名
       HostedZoneConfig:
         Comment: !Sub "Hosted zone for ALB endpoints in ${EnvironmentName}"
       Tags:
@@ -60,6 +60,9 @@ Outputs:
     Value: !Ref HostedZone
     Export:
       Name: !Sub ${EnvironmentName}-HostedZoneId
+  NameServers:
+    Description: 'Name Servers for ALB'
+    Value: !Join [',', !GetAtt HostedZone.NameServers]
   CertificateArn:
     Description: 'Validated ACM Certificate ARN for ALB Listener'
     Value: !Ref SSLCertificate

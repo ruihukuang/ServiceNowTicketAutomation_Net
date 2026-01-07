@@ -6,7 +6,7 @@ on:
       domain_name:
         description: 'Domain name to register (e.g., myapp-alb.com)'
         required: true
-        default: 'api.servicenow.com'
+        default: 'servicenow-app.com'
 
 permissions:
   id-token: write   # This is required for requesting the JWT
@@ -420,7 +420,7 @@ jobs:
           # 注册域名（1年）
           aws route53domains register-domain \
             --domain-name "$DOMAIN" \
-            --duration-in-years 3 \
+            --duration-in-years 1 \
             --auto-renew false \
             --admin-contact file://contact-info.json \
             --registrant-contact file://contact-info.json \
