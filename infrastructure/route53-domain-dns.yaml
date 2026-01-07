@@ -1,0 +1,72 @@
+# 1-route53-standalone.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Standalone Route 53 Hosted Zone and Certificate for future ALB'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: "production"
+  FullDomainName:
+    Type: String
+    Default: "api.servicenow.com" # 🔴 请将 yourdomain.com 替换成您注册的真实域名
+    Description: 'The full API domain name (e.g., api.example.com)'
+
+Resources:
+  # 1. 使用您现有的域名创建托管区
+  # 注意：此模板假设您已拥有该域名。如需注册新域名，需先通过 AWS 控制台或 CLI 完成。
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Select [1, !Split ['.', !Ref FullDomainName, 2]] # 自动从完整域名中提取根域名
+      HostedZoneConfig:
+        Comment: !Sub "Hosted zone for ALB endpoints in ${EnvironmentName}"
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # 2. 为域名申请 ACM 证书
+  SSLCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref FullDomainName
+      ValidationMethod: DNS
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # 3. 证书验证记录
+  CertificateValidationRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Name
+      Type: !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Type
+      TTL: 300
+      ResourceRecords:
+        - !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Value
+
+  # 4. 证书验证资源
+  CertificateValidation:
+    Type: AWS::CertificateManager::CertificateValidation
+    DependsOn: CertificateValidationRecord
+    Properties:
+      CertificateArn: !Ref SSLCertificate
+      ValidationRecordFqdns:
+        - !GetAtt SSLCertificate.DomainValidationOptions.0.ResourceRecord.Name
+
+Outputs:
+  HostedZoneId:
+    Description: 'Route 53 Hosted Zone ID for ALB'
+    Value: !Ref HostedZone
+    Export:
+      Name: !Sub ${EnvironmentName}-HostedZoneId
+  CertificateArn:
+    Description: 'Validated ACM Certificate ARN for ALB Listener'
+    Value: !Ref SSLCertificate
+    Export:
+      Name: !Sub ${EnvironmentName}-CertificateArn
+  FullDomainNameOutput:
+    Description: 'The domain name to be used for ALB'
+    Value: !Ref FullDomainName
+    Export:
+      Name: !Sub ${EnvironmentName}-FullDomainName
