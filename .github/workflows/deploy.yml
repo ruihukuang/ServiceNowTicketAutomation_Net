@@ -6,7 +6,7 @@ on:
       domain_name:
         description: 'Domain name to register (e.g., myapp-alb.com)'
         required: true
-        default: 'servicenow.com'
+        default: 'api.servicenow.com'
 
 permissions:
   id-token: write   # This is required for requesting the JWT
@@ -372,7 +372,7 @@ jobs:
           DOMAIN="${{ github.event.inputs.domain_name }}"
           echo "Checking availability for: $DOMAIN"
           
-          RESPONSE=$(aws route53domains check-domain-availability --domain-name "$DOMAIN")
+          RESPONSE=$(aws route53domains check-domain-availability --domain-name "$DOMAIN" -region us-east-1)
           AVAILABLE=$(echo $RESPONSE | jq -r '.Availability')
           
           echo "Domain availability: $AVAILABLE"
@@ -460,32 +460,6 @@ jobs:
             sleep 10
           done
 
-      - name: Create Route 53 Hosted Zone
-        if: steps.register-domain.outputs.domain_name
-        run: |
-          DOMAIN="${{ steps.register-domain.outputs.domain_name }}"
-          
-          echo "Creating Hosted Zone for: $DOMAIN"
-          
-          # 创建托管区
-          HOSTED_ZONE_RESPONSE=$(aws route53 create-hosted-zone \
-            --name "$DOMAIN" \
-            --caller-reference "$DOMAIN-$(date +%s)" \
-            --hosted-zone-config "Comment=Created by GitHub Actions,PrivateZone=false")
-          
-          HOSTED_ZONE_ID=$(echo $HOSTED_ZONE_RESPONSE | jq -r '.HostedZone.Id' | cut -d'/' -f3)
-          NAME_SERVERS=$(echo $HOSTED_ZONE_RESPONSE | jq -r '.DelegationSet.NameServers | join(",")')
-          
-          echo "✅ Hosted Zone created: $HOSTED_ZONE_ID"
-          echo "Name Servers: $NAME_SERVERS"
-          
-          # 保存到 GitHub Actions 输出
-          echo "hosted_zone_id=$HOSTED_ZONE_ID" >> $GITHUB_OUTPUT
-          echo "name_servers=$NAME_SERVERS" >> $GITHUB_OUTPUT
-          
-          # 注意：您需要将 Name Servers 配置到域名注册商处
-          # 对于 Route 53 注册的域名，这通常是自动的
-          echo "IMPORTANT: Ensure Name Servers are properly set at your registrar"
 
   # 5. Route 53
   deploy-infrastructure-Route53-stack:
