@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Standalone Route 53 Hosted Zone and Certificate for future ALB'
+Description: 'Route 53 Hosted Zone with ACM Certificate'
 
 Parameters:
   EnvironmentName:
@@ -9,25 +9,17 @@ Parameters:
     Type: AWS::EC2::VPC::Id
   FullDomainName:
     Type: String
-    Default: "service-app.square.site"
-    Description: 'The full API domain name (e.g., api.example.com)'
-  VPCRegion: 
-    Type: String
+    Default: "servicenow123.io"
 
 Resources:
-  # 1. 托管区
+  # 1. 私有托管区
   HostedZone:
     Type: AWS::Route53::HostedZone
     Properties:
       Name: !Ref FullDomainName
-      HostedZoneConfig:
-        Comment: !Sub "Hosted zone for ALB endpoints in ${EnvironmentName}"
-      Tags:
-        - Key: Environment
-          Value: !Ref EnvironmentName
       VPCs:
         - VPCId: !Ref VpcId
-          VPCRegion: !Ref VPCRegion
+          VPCRegion: !Ref "AWS::Region"
 
   # 2. ACM 证书
   SSLCertificate:
@@ -35,59 +27,107 @@ Resources:
     Properties:
       DomainName: !Ref FullDomainName
       ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Ref FullDomainName
-          ValidationDomain: !Ref FullDomainName
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
 
-  # 3. 使用 Custom Resource 等待证书验证记录可用
-  CertificateValidationWaiter:
-    Type: Custom::CertificateValidationWaiter
+  # 3. 等待函数（等待验证信息可用）
+  WaitForValidation:
+    Type: AWS::CloudFormation::CustomResource
     DependsOn: SSLCertificate
     Properties:
-      ServiceToken: !GetAtt CertificateValidationLambda.Arn
+      ServiceToken: !GetAtt ValidationWaiterLambda.Arn
       CertificateArn: !Ref SSLCertificate
+      Timeout: 600  # 10分钟
+
+  # 4. Lambda 函数（等待验证信息）
+  ValidationWaiterLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import json, time, boto3
+          def handler(event, context):
+            acm = boto3.client('acm')
+            cert_arn = event['ResourceProperties']['CertificateArn']
+            
+            for _ in range(60):  # 最多等待5分钟
+              resp = acm.describe_certificate(CertificateArn=cert_arn)
+              validation = resp['Certificate']['DomainValidationOptions'][0]
+              if 'ResourceRecord' in validation:
+                return {
+                  'Data': {
+                    'Name': validation['ResourceRecord']['Name'],
+                    'Value': validation['ResourceRecord']['Value'],
+                    'Type': validation['ResourceRecord']['Type']
+                  }
+                }
+              time.sleep(5)
+            raise Exception('Timeout waiting for validation record')
+
+      Handler: index.handler
+      Runtime: python3.9
+      Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 300
 
-  # 4. 证书验证记录（在等待后创建）
+  # 5. Lambda 执行角色
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ACMReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: acm:DescribeCertificate
+                Resource: "*"
+
+  # 6. 创建验证记录（关键部分）
   CertificateValidationRecord:
     Type: AWS::Route53::RecordSet
-    DependsOn: CertificateValidationWaiter
+    DependsOn: WaitForValidation
     Properties:
       HostedZoneId: !Ref HostedZone
-      Name: !GetAtt CertificateValidationWaiter.ValidationRecordName
-      Type: !GetAtt CertificateValidationWaiter.ValidationRecordType
+      Name: !GetAtt WaitForValidation.Name      # 从 Lambda 获取
+      Type: !GetAtt WaitForValidation.Type      # 通常是 CNAME
       TTL: 300
       ResourceRecords:
-        - !GetAtt CertificateValidationWaiter.ValidationRecordValue
+        - !GetAtt WaitForValidation.Value
 
-  # 5. 证书验证
+  # 7. 证书验证资源
   CertificateValidation:
     Type: AWS::CertificateManager::CertificateValidation
     DependsOn: CertificateValidationRecord
     Properties:
       CertificateArn: !Ref SSLCertificate
       ValidationRecordFqdns:
-        - !GetAtt CertificateValidationWaiter.ValidationRecordName
+        - !GetAtt WaitForValidation.Name
 
 Outputs:
-  HostedZoneId:
-    Description: 'Route 53 Hosted Zone ID for ALB'
-    Value: !Ref HostedZone
-    Export:
-      Name: !Sub ${EnvironmentName}-HostedZoneId
-  NameServers:
-    Description: 'Name Servers for ALB'
-    Value: !Join [',', !GetAtt HostedZone.NameServers]
   CertificateArn:
-    Description: 'Validated ACM Certificate ARN for ALB Listener'
+    Description: ACM Certificate ARN
     Value: !Ref SSLCertificate
     Export:
-      Name: !Sub ${EnvironmentName}-CertificateArn
-  FullDomainNameOutput:
-    Description: 'The domain name to be used for ALB'
-    Value: !Ref FullDomainName
+      Name: !Sub $CertificateArn
+  
+  HostedZoneId:
+    Description: Route53 Hosted Zone ID
+    Value: !Ref HostedZone
     Export:
-      Name: !Sub ${EnvironmentName}-FullDomainName
+      Name: !Sub $HostedZoneId
+  
+  CertificateDomainValidation:
+    Description: Certificate validation record details
+    Value: !Sub |
+      Name: ${WaitForValidation.Name}
+      Value: ${WaitForValidation.Value}
+      Type: ${WaitForValidation.Type}

@@ -345,7 +345,7 @@ jobs:
         fi
 
  
-
+  # manually create a subdomain name in https://www.weebly.com/checkout/domain-settings/users/154713302/sites/786504475351781631. Then create a pivate hosted zone in Route 53
   # 4. Route 53
   deploy-infrastructure-Route53-stack:
     needs: deploy-infrastructure-ecs-stack
@@ -387,7 +387,6 @@ jobs:
           --output text \
           --region $AWS_REGION)
 
-        VPCRegion=$AWS_REGION 
 
         
         # Try to create Route 53 Stack
@@ -396,7 +395,6 @@ jobs:
           --template-body file://infrastructure/route53-domain-dns.yaml \
             --parameters \
                 ParameterKey=VpcId,ParameterValue=$VPC_ID \
-                ParameterKey=VPCRegion,ParameterValue=$VPCRegion \
           --capabilities CAPABILITY_IAM
           --region $AWS_REGION 
     
