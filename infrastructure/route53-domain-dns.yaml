@@ -112,22 +112,20 @@ Resources:
       ValidationRecordFqdns:
         - !GetAtt WaitForValidation.Name
 
+
 Outputs:
   CertificateArn:
     Description: ACM Certificate ARN
     Value: !Ref SSLCertificate
-    Export:
-      Name: !Sub $CertificateArn
   
   HostedZoneId:
     Description: Route53 Hosted Zone ID
     Value: !Ref HostedZone
-    Export:
-      Name: !Sub $HostedZoneId
   
-  CertificateDomainValidation:
-    Description: Certificate validation record details
-    Value: !Sub |
-      Name: ${WaitForValidation.Name}
-      Value: ${WaitForValidation.Value}
-      Type: ${WaitForValidation.Type}
+  ValidationRecordName:
+    Description: Validation record name
+    Value: !GetAtt WaitForValidation.Name
+  
+  ValidationRecordValue:
+    Description: Validation record value
+    Value: !GetAtt WaitForValidation.Value
