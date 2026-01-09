@@ -15,13 +15,13 @@ Parameters:
   ALBSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
   CertificateArn:
-    Type: string 
+    Type: String
   HostedZoneId:
-    Type: string
+    Type: String
   FullDomainName:
     Type: String
-    Default: "servicenow123.io"
-    
+    Default: "production.servicenow123.io"
+
 Resources:
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -80,7 +80,7 @@ Outputs:
     Value: !GetAtt ApplicationLoadBalancer.DNSName
   ALBFinalEndpoint:
     Description: 'Final HTTPS endpoint for users'
-    Value: !Sub https://!ImportValue ${EnvironmentName}-FullDomainName
+    Value: !Sub https://${FullDomainName}
   TargetGroupArn:
     Description: 'Target Group ARN'
     Value: !Ref TargetGroup
