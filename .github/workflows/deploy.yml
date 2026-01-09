@@ -471,13 +471,26 @@ jobs:
   #         --query "Stacks[0].Outputs[?OutputKey=='ALBSecurityGroupId'].OutputValue" \
   #         --output text \
   #         --region $AWS_REGION)
+
+  #       CertificateArn=$(aws cloudformation describe-stacks \
+  #         --stack-name $Route53_STACK \
+  #         --query "Stacks[0].Outputs[?OutputKey=='CertificateArn'].OutputValue" \
+  #         --output text \
+  #         --region $AWS_REGION)
+
+  #       HostedZoneId=$(aws cloudformation describe-stacks \
+  #         --stack-name $Route53_STACK \
+  #         --query "Stacks[0].Outputs[?OutputKey=='HostedZoneId'].OutputValue" \
+  #         --output text \
+  #         --region $AWS_REGION)
       
       
   #       echo "📊 Retrieved parameters:"
   #       echo "VPC ID: $VPC_ID"
   #       echo "Public Subnets: $PUBLIC_SUBNETS"
   #       echo "Application Load Balancer Security Group: $ApplicationLB_SG_ID"
-
+  #       echo "SSL certificate: $CertificateArn"
+  #       echo "Hosted Zone: $HostedZoneId"
 
   #       # Create parameters JSON file for application load balancer
   #       cat > parameters_applicationLB.json << EOF
@@ -497,6 +510,14 @@ jobs:
   #        {
   #         "ParameterKey": "ALBSecurityGroupId",
   #         "ParameterValue": "$ApplicationLB_SG_ID"
+  #        },
+  #        {
+  #         "ParameterKey": "CertificateArn",
+  #         "ParameterValue": "$CertificateArn"
+  #        },
+  #        {
+  #         "ParameterKey": "HostedZoneId",
+  #         "ParameterValue": "$HostedZoneId"
   #        }
   #       ]
   #       EOF
