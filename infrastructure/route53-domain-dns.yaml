@@ -10,6 +10,8 @@ Parameters:
   FullDomainName:
     Type: String
     Default: "servicenow123.io"
+  VPCRegion:
+    Type:String
 
 Resources:
   HostedZone:
@@ -18,7 +20,7 @@ Resources:
       Name: !Ref FullDomainName
       VPCs:
         - VPCId: !Ref VpcId
-          VPCRegion: !Ref "AWS::Region"
+          VPCRegion: !Ref VPCRegion
 
   SSLCertificate:
     Type: AWS::CertificateManager::Certificate
