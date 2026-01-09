@@ -14,7 +14,14 @@ Parameters:
     Default: 8080
   ALBSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
-
+  CertificateArn:
+    Type: string 
+  HostedZoneId:
+    Type: string
+  FullDomainName:
+    Type: String
+    Default: "servicenow123.io"
+    
 Resources:
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -51,8 +58,7 @@ Resources:
       Port: 443
       SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
       Certificates:
-        - CertificateArn: !ImportValue
-            !Sub ${EnvironmentName}-CertificateArn
+        - CertificateArn: !Ref CertificateArn
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
@@ -61,10 +67,8 @@ Resources:
     Type: AWS::Route53::RecordSet
     DependsOn: ApplicationLoadBalancer
     Properties:
-      HostedZoneId: !ImportValue
-        !Sub ${EnvironmentName}-HostedZoneId
-      Name: !ImportValue
-        !Sub ${EnvironmentName}-FullDomainName
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref FullDomainName
       Type: A
       AliasTarget:
         DNSName: !GetAtt ApplicationLoadBalancer.DNSName
