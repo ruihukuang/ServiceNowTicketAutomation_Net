@@ -27,50 +27,14 @@ Resources:
     Properties:
       DomainName: !Ref FullDomainName
       ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref FullDomainName
+          ValidationDomain: !Ref FullDomainName
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
 
-  # 3. 等待函数（等待验证信息可用）
-  WaitForValidation:
-    Type: AWS::CloudFormation::CustomResource
-    DependsOn: SSLCertificate
-    Properties:
-      ServiceToken: !GetAtt ValidationWaiterLambda.Arn
-      CertificateArn: !Ref SSLCertificate
-      Timeout: 600  # 10分钟
-
-  # 4. Lambda 函数（等待验证信息）
-  ValidationWaiterLambda:
-    Type: AWS::Lambda::Function
-    Properties:
-      Code:
-        ZipFile: |
-          import json, time, boto3
-          def handler(event, context):
-            acm = boto3.client('acm')
-            cert_arn = event['ResourceProperties']['CertificateArn']
-            
-            for _ in range(60):  # 最多等待5分钟
-              resp = acm.describe_certificate(CertificateArn=cert_arn)
-              validation = resp['Certificate']['DomainValidationOptions'][0]
-              if 'ResourceRecord' in validation:
-                return {
-                  'Data': {
-                    'Name': validation['ResourceRecord']['Name'],
-                    'Value': validation['ResourceRecord']['Value'],
-                    'Type': validation['ResourceRecord']['Type']
-                  }
-                }
-              time.sleep(5)
-            raise Exception('Timeout waiting for validation record')
-
-      Handler: index.handler
-      Runtime: python3.9
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
-
-  # 5. Lambda 执行角色
+  # 3. Lambda 执行角色
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -78,40 +42,139 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Principal: {Service: lambda.amazonaws.com}
+            Principal:
+              Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: ACMReadOnly
+        - PolicyName: ACMRoute53Access
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action: acm:DescribeCertificate
+                Action:
+                  - acm:DescribeCertificate
+                  - acm:RequestCertificate
+                  - acm:DeleteCertificate
                 Resource: "*"
+              - Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                  - route53:GetChange
+                Resource:
+                  - !Sub "arn:aws:route53:::hostedzone/${HostedZone}"
+                  - "arn:aws:route53:::change/*"
 
-  # 6. 创建验证记录（关键部分）
-  CertificateValidationRecord:
-    Type: AWS::Route53::RecordSet
-    DependsOn: WaitForValidation
+  # 4. Lambda 函数（获取并创建验证记录）
+  CertificateValidationLambda:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - SSLCertificate
+      - LambdaExecutionRole
     Properties:
-      HostedZoneId: !Ref HostedZone
-      Name: !GetAtt WaitForValidation.Name      # 从 Lambda 获取
-      Type: !GetAtt WaitForValidation.Type      # 通常是 CNAME
-      TTL: 300
-      ResourceRecords:
-        - !GetAtt WaitForValidation.Value
+      Code:
+        ZipFile: |
+          import json
+          import time
+          import boto3
+          import cfnresponse
+          
+          acm_client = boto3.client('acm')
+          route53_client = boto3.client('route53')
+          
+          def handler(event, context):
+            try:
+              # 处理 CloudFormation 事件
+              if event['RequestType'] == 'Delete':
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                return
+              
+              certificate_arn = event['ResourceProperties']['CertificateArn']
+              hosted_zone_id = event['ResourceProperties']['HostedZoneId']
+              
+              # 等待 ACM 证书验证记录可用
+              for attempt in range(30):  # 最多等待5分钟 (30 * 10秒)
+                try:
+                  response = acm_client.describe_certificate(CertificateArn=certificate_arn)
+                  cert_details = response['Certificate']
+                  
+                  # 检查验证选项
+                  if cert_details.get('DomainValidationOptions'):
+                    for option in cert_details['DomainValidationOptions']:
+                      if 'ResourceRecord' in option:
+                        record = option['ResourceRecord']
+                        
+                        # 创建 Route53 CNAME 记录
+                        change_batch = {
+                          'Changes': [{
+                            'Action': 'UPSERT',
+                            'ResourceRecordSet': {
+                              'Name': record['Name'],
+                              'Type': record['Type'],
+                              'TTL': 300,
+                              'ResourceRecords': [{'Value': record['Value']}]
+                            }
+                          }]
+                        }
+                        
+                        # 在 Route53 中创建记录
+                        route53_client.change_resource_record_sets(
+                          HostedZoneId=hosted_zone_id,
+                          ChangeBatch=change_batch
+                        )
+                        
+                        # 等待记录传播
+                        time.sleep(10)
+                        
+                        # 返回记录信息
+                        response_data = {
+                          'ValidationRecordName': record['Name'],
+                          'ValidationRecordValue': record['Value']
+                        }
+                        
+                        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+                        return
+                  
+                except Exception as e:
+                  print(f"Attempt {attempt + 1} failed: {str(e)}")
+                
+                time.sleep(10)
+              
+              # 超时
+              raise Exception("Timeout waiting for ACM validation record")
+              
+            except Exception as e:
+              print(f"Error: {str(e)}")
+              cfnresponse.send(event, context, cfnresponse.FAILED, {})
+      Handler: index.handler
+      Runtime: python3.9
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300  # 5分钟
 
-  # 7. 证书验证资源
-  CertificateValidation:
-    Type: AWS::CertificateManager::CertificateValidation
-    DependsOn: CertificateValidationRecord
+  # 5. 自定义资源 - 处理证书验证
+  CertificateValidationCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn:
+      - CertificateValidationLambda
+      - HostedZone
+      - SSLCertificate
     Properties:
+      ServiceToken: !GetAtt CertificateValidationLambda.Arn
       CertificateArn: !Ref SSLCertificate
-      ValidationRecordFqdns:
-        - !GetAtt WaitForValidation.Name
+      HostedZoneId: !Ref HostedZone
 
+  # 6. 等待证书验证完成
+  WaitForCertificateValidation:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    
+  CertificateValidationWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: CertificateValidationCustomResource
+    Properties:
+      Handle: !Ref WaitForCertificateValidation
+      Timeout: 600  # 10分钟超时
+      Count: 1
 
 Outputs:
   CertificateArn:
@@ -124,8 +187,12 @@ Outputs:
   
   ValidationRecordName:
     Description: Validation record name
-    Value: !GetAtt WaitForValidation.Name
+    Value: !GetAtt CertificateValidationCustomResource.ValidationRecordName
   
   ValidationRecordValue:
     Description: Validation record value
-    Value: !GetAtt WaitForValidation.Value
+    Value: !GetAtt CertificateValidationCustomResource.ValidationRecordValue
+  
+  CertificateStatus:
+    Description: Certificate Validation Status
+    Value: !GetAtt SSLCertificate.Status
