@@ -20,7 +20,7 @@ Parameters:
     Type: String
   FullDomainName:
     Type: String
-    Default: "production.servicenow123.io"
+    Default: "servicenow123.io"
 
 Resources:
   ApplicationLoadBalancer:
