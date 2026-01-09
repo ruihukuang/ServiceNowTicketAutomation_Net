@@ -1,4 +1,3 @@
-# 2-alb-https-only-updated.yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'ALB that uses pre-created DNS and Certificate resources'
 
@@ -16,7 +15,6 @@ Parameters:
   ALBSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
 
-# 关键改动：从外部导入值，而非作为参数传入
 Resources:
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -33,7 +31,17 @@ Resources:
           Value: !Ref EnvironmentName
 
   TargetGroup:
-    # ... (保持与您提供的 TargetGroup 部分相同) ...
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: !Ref ContainerPort
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
 
   HTTPSListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -43,22 +51,18 @@ Resources:
       Port: 443
       SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
       Certificates:
-        # 导入之前堆栈导出的证书ARN
         - CertificateArn: !ImportValue
             !Sub ${EnvironmentName}-CertificateArn
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
 
-  # 🔴 新增：在 ALB 创建后，自动创建指向它的 DNS 记录
   ALBDNSRecord:
     Type: AWS::Route53::RecordSet
     DependsOn: ApplicationLoadBalancer
     Properties:
-      # 导入之前堆栈导出的托管区ID
       HostedZoneId: !ImportValue
         !Sub ${EnvironmentName}-HostedZoneId
-      # 导入之前堆栈导出的完整域名
       Name: !ImportValue
         !Sub ${EnvironmentName}-FullDomainName
       Type: A
