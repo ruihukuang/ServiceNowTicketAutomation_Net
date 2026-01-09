@@ -18,9 +18,9 @@ Parameters:
     Type: String
   HostedZoneId:
     Type: String
-  FullDomainName:
+  DomainNameCustom:
     Type: String
-    Default: "servicenow123.io"
+    Default: "prod.servicenow123.io"
 
 Resources:
   ApplicationLoadBalancer:
@@ -68,7 +68,7 @@ Resources:
     DependsOn: ApplicationLoadBalancer
     Properties:
       HostedZoneId: !Ref HostedZoneId
-      Name: !Ref FullDomainName
+      Name: !Ref DomainNameCustom
       Type: A
       AliasTarget:
         DNSName: !GetAtt ApplicationLoadBalancer.DNSName
