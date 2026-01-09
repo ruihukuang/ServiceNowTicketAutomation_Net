@@ -395,6 +395,7 @@ jobs:
           --template-body file://infrastructure/route53-domain-dns.yaml \
             --parameters \
                 ParameterKey=VpcId,ParameterValue=$VPC_ID \
+                ParameterKey=VPCRegion,ParameterValue=$AWS_REGION 
           --capabilities CAPABILITY_IAM
           --region $AWS_REGION 
     
