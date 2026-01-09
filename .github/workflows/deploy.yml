@@ -26,6 +26,7 @@ env:
   ECS_SERVICE_STACK: "ECS-Service-Stack"
 
 jobs:
+  #when using separate jobs in GitHub Actions, you can't directly use !ImportValue to reference outputs from another CloudFormation stack. Instead, you can use AWS CLI commands to fetch the necessary outputs and store them in a JSON file, which can then be referenced in your scripts.
   # build-push-to-ecr:
   #   runs-on: ubuntu-latest
     
