@@ -330,7 +330,7 @@ jobs:
         echo "⏳ Waiting for stack creation..."
         aws cloudformation wait stack-create-complete \
           --stack-name $ECS_CLUSTER_STACK \
-          --region ${{ secrets.REGION }}
+          --region $AWS_REGION
         
         if [ $? -eq 0 ]; then
           echo "✅ Infrastructure $ECS_CLUSTER_STACK deployed successfully!"
@@ -403,7 +403,7 @@ jobs:
         echo "⏳ Waiting for stack creation..."
         aws cloudformation wait stack-create-complete \
           --stack-name $Route53_STACK \
-          --region ${{ secrets.REGION }}
+          --region $AWS_REGION
         
         if [ $? -eq 0 ]; then
           echo "✅ Infrastructure $Route53_STACK deployed successfully!"
