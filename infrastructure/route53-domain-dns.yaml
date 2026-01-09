@@ -12,7 +12,6 @@ Parameters:
     Default: "servicenow123.io"
 
 Resources:
-  # 1. 私有托管区
   HostedZone:
     Type: AWS::Route53::HostedZone
     Properties:
@@ -21,7 +20,6 @@ Resources:
         - VPCId: !Ref VpcId
           VPCRegion: !Ref "AWS::Region"
 
-  # 2. ACM 证书
   SSLCertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
@@ -31,16 +29,14 @@ Resources:
         - Key: Environment
           Value: !Ref EnvironmentName
 
-  # 3. 等待函数（等待验证信息可用）
   WaitForValidation:
     Type: AWS::CloudFormation::CustomResource
     DependsOn: SSLCertificate
     Properties:
       ServiceToken: !GetAtt ValidationWaiterLambda.Arn
       CertificateArn: !Ref SSLCertificate
-      Timeout: 600  # 10分钟
+      Timeout: 600
 
-  # 4. Lambda 函数（等待验证信息）
   ValidationWaiterLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -51,7 +47,7 @@ Resources:
             acm = boto3.client('acm')
             cert_arn = event['ResourceProperties']['CertificateArn']
             
-            for _ in range(60):  # 最多等待5分钟
+            for _ in range(60):
               resp = acm.describe_certificate(CertificateArn=cert_arn)
               validation = resp['Certificate']['DomainValidationOptions'][0]
               if 'ResourceRecord' in validation:
@@ -70,7 +66,6 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 300
 
-  # 5. Lambda 执行角色
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -91,27 +86,16 @@ Resources:
                 Action: acm:DescribeCertificate
                 Resource: "*"
 
-  # 6. 创建验证记录（关键部分）
   CertificateValidationRecord:
     Type: AWS::Route53::RecordSet
     DependsOn: WaitForValidation
     Properties:
       HostedZoneId: !Ref HostedZone
-      Name: !GetAtt WaitForValidation.Name      # 从 Lambda 获取
-      Type: !GetAtt WaitForValidation.Type      # 通常是 CNAME
+      Name: !GetAtt WaitForValidation.Name
+      Type: !GetAtt WaitForValidation.Type
       TTL: 300
       ResourceRecords:
         - !GetAtt WaitForValidation.Value
-
-  # 7. 证书验证资源
-  CertificateValidation:
-    Type: AWS::CertificateManager::CertificateValidation
-    DependsOn: CertificateValidationRecord
-    Properties:
-      CertificateArn: !Ref SSLCertificate
-      ValidationRecordFqdns:
-        - !GetAtt WaitForValidation.Name
-
 
 Outputs:
   CertificateArn:
