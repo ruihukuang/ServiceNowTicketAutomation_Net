@@ -345,9 +345,12 @@ jobs:
         fi
 
  
-  # manually create a subdomain name in https://www.weebly.com/checkout/domain-settings/users/154713302/sites/786504475351781631. Then create a pivate hosted zone in Route 53
-  # 4. Route 53
-  deploy-infrastructure-Route53-stack:
+  
+  # 4. manually register a domain, a public hosted zone, update name servers in the registered domain with the name servers in the public hosted zone,
+  # and create a ssl certiicate from ACM, then create a CNAME record in the hosted zone using CNAME name and value from ACM for verfication of the ssl certificate
+
+  # 5. Application Load balancer setup 
+  deploy-infrastructure-appliationloadbalancer-stack:
     needs: deploy-infrastructure-ecs-stack
     runs-on: ubuntu-latest
 
@@ -362,23 +365,23 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
         aws-region: ${{ secrets.REGION }}
 
-    - name: Check if Route 53 Stack Already Exists
-      id: check_Route53
+    - name: Check if Application Load Balancer Already Exists
+      id: check_applicatonLB
       run: |
-        echo "🔍 Checking if Route 53 stack already exists..."   
-        # First check if Route 53 stack exists at all
-        if aws cloudformation describe-stacks --stack-name $Route53_STACK --region $AWS_REGION 2>/dev/null; then
-        echo "✅ Route 53 stack exists"
-        echo "Route53_exists=true" >> $GITHUB_OUTPUT
+        echo "🔍 Checking if Application Load Balancer stack already exists..."   
+        # First check if Application Load Balancer stack exists at all
+        if aws cloudformation describe-stacks --stack-name $Application_Load_Balancer_STACK --region $AWS_REGION 2>/dev/null; then
+        echo "✅ Application Load Balancer stack exists"
+        echo "Application_Load_Balancer_exists=true" >> $GITHUB_OUTPUT
         else
-        echo "Route53_exists=false" >> $GITHUB_OUTPUT
+        echo "Application_Load_Balancer_exists=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Deploy CloudFormation Route 53 Stack
-      if: steps.check_Route53.outputs.Route53_exists == 'false'
+    - name: Deploy Application_Load_Balancer Stack
+      if: steps.check_applicatonLB.outputs.Application_Load_Balancer_exists == 'false'
       run: |
         
-        echo "🚀 Deploying infrastructure Route53 for production..."
+        echo "🚀 Deploying infrastructure Application_Load_Balancer_exists for production..."
 
         # Get outputs from VPC stack
         VPC_ID=$(aws cloudformation describe-stacks \
@@ -386,148 +389,84 @@ jobs:
           --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue" \
           --output text \
           --region $AWS_REGION)
+      
+        PUBLIC_SUBNETS=$(aws cloudformation describe-stacks \
+          --stack-name $VPC_STACK \
+          --query "Stacks[0].Outputs[?OutputKey=='PublicSubnetIds'].OutputValue" \
+          --output text \
+          --region $AWS_REGION)
+      
+        ApplicationLB_SG_ID=$(aws cloudformation describe-stacks \
+          --stack-name $VPC_STACK \
+          --query "Stacks[0].Outputs[?OutputKey=='ALBSecurityGroupId'].OutputValue" \
+          --output text \
+          --region $AWS_REGION)
+
+        CertificateArn=$(aws acm list-certificates --query "CertificateSummaryList[?DomainName=='*.prod.servicenow123.click'].CertificateArn" --output text)
+      
+      
+        echo "📊 Retrieved parameters:"
+        echo "VPC ID: $VPC_ID"
+        echo "Public Subnets: $PUBLIC_SUBNETS"
+        echo "Application Load Balancer Security Group: $ApplicationLB_SG_ID"
+        echo "SSL certificate ARN: $CertificateArn"
 
 
+        # Create parameters JSON file for application load balancer
+        cat > parameters_applicationLB.json << EOF
+        [
+         {
+          "ParameterKey": "EnvironmentName",
+          "ParameterValue": "$EnvironmentName"
+         },
+         {
+          "ParameterKey": "VpcId",
+          "ParameterValue": "$VPC_ID"
+         },
+         {
+          "ParameterKey": "PublicSubnetIds",
+          "ParameterValue": "$PUBLIC_SUBNETS"
+         },
+         {
+          "ParameterKey": "ALBSecurityGroupId",
+          "ParameterValue": "$ApplicationLB_SG_ID"
+         },
+         {
+          "ParameterKey": "CertificateArn",
+          "ParameterValue": "$CertificateArn"
+         }
+        ]
+        EOF
+    
+        echo "📄 Parameters JSON:"
+        cat parameters_applicationLB.json
         
-        # Try to create Route 53 Stack
+        # Try to create Application_Load_Balancer_STACK
         aws cloudformation create-stack \
-          --stack-name $Route53_STACK\
-          --template-body file://infrastructure/route53-domain-dns.yaml \
-            --parameters \
-                ParameterKey=VpcId,ParameterValue=$VPC_ID \
-          --capabilities CAPABILITY_IAM
+          --stack-name $Application_Load_Balancer_STACK\
+          --template-body file://infrastructure/alb-https.yaml \
+          --parameters file://parameters_applicationLB.json \
+          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --region $AWS_REGION 
     
         
         # 等待栈创建完成
         echo "⏳ Waiting for stack creation..."
         aws cloudformation wait stack-create-complete \
-          --stack-name $Route53_STACK \
+          --stack-name $Application_Load_Balancer_STACK \
           --region ${{ secrets.REGION }}
         
         if [ $? -eq 0 ]; then
-          echo "✅ Infrastructure $Route53_STACK deployed successfully!"
+          echo "✅ Infrastructure $Application_Load_Balancer_STACK deployed successfully!"
         else
           echo "❌ Stack creation failed. Checking events..."  
           aws cloudformation describe-stack-events \
-            --stack-name $Route53_STACK \
+            --stack-name $Application_Load_Balancer_STACK \
             --region $AWS_REGION \
             --query "StackEvents[?ResourceStatus=='CREATE_FAILED']" \
             --output table
           exit 1
         fi
-
-  # # 5. Application Load balancer setup 
-  # deploy-infrastructure-appliationloadbalancer-stack:
-  #   needs: deploy-infrastructure-ecs-stack
-  #   runs-on: ubuntu-latest
-
-  #   steps:
-
-  #   - name: Checkout repository
-  #     uses: actions/checkout@v2
-    
-  #   - name: Configure AWS Credentials
-  #     uses: aws-actions/configure-aws-credentials@v1
-  #     with:
-  #       role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
-  #       aws-region: ${{ secrets.REGION }}
-
-  #   - name: Check if Application Load Balancer Already Exists
-  #     id: check_applicatonLB
-  #     run: |
-  #       echo "🔍 Checking if Application Load Balancer stack already exists..."   
-  #       # First check if Application Load Balancer stack exists at all
-  #       if aws cloudformation describe-stacks --stack-name $Application_Load_Balancer_STACK --region $AWS_REGION 2>/dev/null; then
-  #       echo "✅ Application Load Balancer stack exists"
-  #       echo "Application_Load_Balancer_exists=true" >> $GITHUB_OUTPUT
-  #       else
-  #       echo "Application_Load_Balancer_exists=false" >> $GITHUB_OUTPUT
-  #       fi
-
-  #   - name: Deploy Application_Load_Balancer Stack
-  #     if: steps.check_applicatonLB.outputs.Application_Load_Balancer_exists == 'false'
-  #     run: |
-        
-  #       echo "🚀 Deploying infrastructure Application_Load_Balancer_exists for production..."
-
-  #       # Get outputs from VPC stack
-  #       VPC_ID=$(aws cloudformation describe-stacks \
-  #         --stack-name  $VPC_STACK\
-  #         --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue" \
-  #         --output text \
-  #         --region $AWS_REGION)
-      
-  #       PUBLIC_SUBNETS=$(aws cloudformation describe-stacks \
-  #         --stack-name $VPC_STACK \
-  #         --query "Stacks[0].Outputs[?OutputKey=='PublicSubnetIds'].OutputValue" \
-  #         --output text \
-  #         --region $AWS_REGION)
-      
-  #       ApplicationLB_SG_ID=$(aws cloudformation describe-stacks \
-  #         --stack-name $VPC_STACK \
-  #         --query "Stacks[0].Outputs[?OutputKey=='ALBSecurityGroupId'].OutputValue" \
-  #         --output text \
-  #         --region $AWS_REGION)
-      
-      
-  #       echo "📊 Retrieved parameters:"
-  #       echo "VPC ID: $VPC_ID"
-  #       echo "Public Subnets: $PUBLIC_SUBNETS"
-  #       echo "Application Load Balancer Security Group: $ApplicationLB_SG_ID"
-
-
-  #       # Create parameters JSON file for application load balancer
-  #       cat > parameters_applicationLB.json << EOF
-  #       [
-  #        {
-  #         "ParameterKey": "EnvironmentName",
-  #         "ParameterValue": "$EnvironmentName"
-  #        },
-  #        {
-  #         "ParameterKey": "VpcId",
-  #         "ParameterValue": "$VPC_ID"
-  #        },
-  #        {
-  #         "ParameterKey": "PublicSubnetIds",
-  #         "ParameterValue": "$PUBLIC_SUBNETS"
-  #        },
-  #        {
-  #         "ParameterKey": "ALBSecurityGroupId",
-  #         "ParameterValue": "$ApplicationLB_SG_ID"
-  #        }
-  #       ]
-  #       EOF
-    
-  #       echo "📄 Parameters JSON:"
-  #       cat parameters_applicationLB.json
-        
-  #       # Try to create Application_Load_Balancer_STACK
-  #       aws cloudformation create-stack \
-  #         --stack-name $Application_Load_Balancer_STACK\
-  #         --template-body file://infrastructure/alb-https.yaml \
-  #         --parameters file://parameters_applicationLB.json \
-  #         --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-  #         --region $AWS_REGION 
-    
-        
-  #       # 等待栈创建完成
-  #       echo "⏳ Waiting for stack creation..."
-  #       aws cloudformation wait stack-create-complete \
-  #         --stack-name $Application_Load_Balancer_STACK \
-  #         --region ${{ secrets.REGION }}
-        
-  #       if [ $? -eq 0 ]; then
-  #         echo "✅ Infrastructure $Application_Load_Balancer_STACK deployed successfully!"
-  #       else
-  #         echo "❌ Stack creation failed. Checking events..."  
-  #         aws cloudformation describe-stack-events \
-  #           --stack-name $Application_Load_Balancer_STACK \
-  #           --region $AWS_REGION \
-  #           --query "StackEvents[?ResourceStatus=='CREATE_FAILED']" \
-  #           --output table
-  #         exit 1
-  #       fi
 
 #   # 5. 更新 ECS 服务使用新镜像
 #   deploy-infrastructure-ecs-service-stack:
