@@ -21,8 +21,9 @@ env:
   VPC_STACK: "VPC-Stack"
   ECS_CLUSTER_STACK: "ECS-Cluster-Stack"
   DOMAIN_CONTACT_EMAIL: ${{ secrets.DOMAIN_CONTACT_EMAIL }}
-  Route53_STACK: "Route53-Stack"
   Application_Load_Balancer_STACK: "Application-Load-Balancer-Stack"
+  ROUTE53_ACCOUNT_ID: "628125037712"  # Route53 所在账户 ID
+  ROUTE53_ROLE_NAME: "AuthenticatedRole"
   ECS_SERVICE_STACK: "ECS-Service-Stack"
 
 jobs:
