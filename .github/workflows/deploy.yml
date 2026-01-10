@@ -470,9 +470,9 @@ jobs:
           exit 1
         fi
 
-  # 5.  ECS 服务使用新镜像
+  # 5. Create ECS 服务 & Update ECS 服务使用新镜像
   deploy-infrastructure-ecs-service-stack:
-    needs: [ deploy-infrastructure-vpc-stack,deploy-infrastructure-ecs-stack]
+    needs: deploy-infrastructure-appliationloadbalancer-stack
     runs-on: ubuntu-latest
 
     
@@ -532,13 +532,6 @@ jobs:
             --output text \
             --region $AWS_REGION)         
 
-          # Get outputs from ALB stack
-
-           TargetGroupArn=$(aws cloudformation describe-stacks \
-            --stack-name $Application_Load_Balancer_STACK \
-            --query "Stacks[0].Outputs[?OutputKey=='TargetGroupArn'].OutputValue" \
-            --output text \
-            --region $AWS_REGION)  
 
           # Get outputs from ECS cluster stack
 
@@ -547,9 +540,48 @@ jobs:
             --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue" \
             --output text \
             --region $AWS_REGION)  
+
+          # Create parameters JSON file for ECS service stack
+           cat > parameters_ECSService.json << EOF
+          [
+           {
+             
+             "ParameterKey": "EnvironmentName",
+             "ParameterValue": "$EnvironmentName"
+            },
+           {
+          
+             "ParameterKey": "VpcId",
+             "ParameterValue": "$VPC_ID"
+            },
+           {
+          
+             "ParameterKey": "PrivateSubnetIds",
+             "ParameterValue": "$PRIVATE_SUBNETS"
+           },
+           {
+          
+             "ParameterKey": "ECSSecurityGroupId",
+             "ParameterValue": "$ECS_SG_ID"
+         },
+         {
+          
+             "ParameterKey": "TargetGroupArn",
+             "ParameterValue": "$TargetGroupArn"
+          },
+          {
+          
+             "ParameterKey": "ClusterName",
+             "ParameterValue": "$ClusterName"
+          }
+         ]
+         EOF
+    
+         echo "📄 Parameters JSON:"
+         cat parameters_ECSService.json
             
           aws cloudformation create-stack \
-          --stack-name $ECS-Service-Stack\
+          --stack-name $ECS_SERVICE_STACK\
           --template-body file://infrastructure/ecs-service-private.yaml \
           --parameters file://parameters.json \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
@@ -558,15 +590,15 @@ jobs:
           # 等待栈创建完成
           echo "⏳ Waiting for stack creation..."
           aws cloudformation wait stack-create-complete \
-            --stack-name $ECS-Service-Stack \
+            --stack-name $ECS_SERVICE_STACK \
             --region $AWS_REGION
         
           if [ $? -eq 0 ]; then
-            echo "✅ Infrastructure $ECS-Service-Stack deployed successfully!"
+            echo "✅ Infrastructure $ECS_SERVICE_STACK deployed successfully!"
           else
             echo "❌ Stack creation failed. Checking events..."  
             aws cloudformation describe-stack-events \
-              --stack-name $ECS-Service-Stack\
+              --stack-name $ECS_SERVICE_STACK\
               --region $AWS_REGION \
               --query "StackEvents[?ResourceStatus=='CREATE_FAILED']" \
               --output table
