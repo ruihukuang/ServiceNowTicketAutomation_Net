@@ -470,127 +470,180 @@ jobs:
           exit 1
         fi
 
-#   # 5. 更新 ECS 服务使用新镜像
-#   deploy-infrastructure-ecs-service-stack:
-#     needs: [build-push-to-ecr, deploy-infrastructure-vpc-stack,deploy-infrastructure-ecs-stack]
-#     runs-on: ubuntu-latest
+  # 5.  ECS 服务使用新镜像
+  deploy-infrastructure-ecs-service-stack:
+    needs: [ deploy-infrastructure-vpc-stack,deploy-infrastructure-ecs-stack]
+    runs-on: ubuntu-latest
 
     
-#     steps:
+    steps:
 
-#     - name: Checkout repository
-#       uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v2
     
-#     - name: Configure AWS Credentials
-#       uses: aws-actions/configure-aws-credentials@v1
-#       with:
-#         role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
-#         aws-region: ${{ secrets.REGION }}
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/${{ secrets.ROLE_NAME }}
+        aws-region: ${{ secrets.REGION }}
 
-#     - name: Check if ECS service Stack Already Exists
-#       id: check_ecs_service
-#       run: |
-#         echo "🔍 Checking if ECS service stack already exists..."   
-#         # First check if ECS service stack exists at all
-#         if aws cloudformation describe-stacks --stack-name $ECS-Service-Stack --region $AWS_REGION 2>/dev/null; then
-#         echo "✅ ECS service stack exists"
-#         echo "ECSService_exists=true" >> $GITHUB_OUTPUT
-#         else
-#         echo "ECSService_exists=false" >> $GITHUB_OUTPUT
-#         fi
+    - name: Check if ECS service Stack Already Exists
+      id: check_ecs_service
+      run: |
+        echo "🔍 Checking if ECS service stack already exists..."   
+        # First check if ECS service stack exists at all
+        if aws cloudformation describe-stacks --stack-name $ECS-Service-Stack --region $AWS_REGION 2>/dev/null; then
+        echo "✅ ECS service stack exists"
+        echo "ECSService_exists=true" >> $GITHUB_OUTPUT
+        else
+        echo "ECSService_exists=false" >> $GITHUB_OUTPUT
+        fi
 
-#     - name: Deploy CloudFormation ECS service Stack
-#       if: steps.check_ecs_service.outputs.ECSService_exists == 'false'
-#       run: |
-#           aws cloudformation create-stack \
-#           --stack-name $ECS-Service-Stack\
-#           --template-body file://infrastructure/ecs-service-private.yaml \
-#           --parameters file://parameters.json \
-#           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-#           --region $AWS_REGION 
+    - name: Deploy CloudFormation ECS service Stack
+      if: steps.check_ecs_service.outputs.ECSService_exists == 'false'
+      run: |
+         
+         echo "Create ECS service "
+
+         # Get outputs from VPC stack
+          VPC_ID=$(aws cloudformation describe-stacks \
+            --stack-name  $VPC_STACK\
+            --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue" \
+            --output text \
+            --region $AWS_REGION)
+      
+          PRIVATE_SUBNETS=$(aws cloudformation describe-stacks \
+            --stack-name $VPC_STACK \
+            --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnetIds'].OutputValue" \
+            --output text \
+            --region $AWS_REGION)
+      
+          ECS_SG_ID=$(aws cloudformation describe-stacks \
+            --stack-name $VPC_STACK \
+            --query "Stacks[0].Outputs[?OutputKey=='ECSSecurityGroupId'].OutputValue" \
+            --output text \
+            --region $AWS_REGION)
+
+          # Get outputs from ALB stack
+
+           TargetGroupArn=$(aws cloudformation describe-stacks \
+            --stack-name $Application_Load_Balancer_STACK \
+            --query "Stacks[0].Outputs[?OutputKey=='TargetGroupArn'].OutputValue" \
+            --output text \
+            --region $AWS_REGION)         
+
+          # Get outputs from ALB stack
+
+           TargetGroupArn=$(aws cloudformation describe-stacks \
+            --stack-name $Application_Load_Balancer_STACK \
+            --query "Stacks[0].Outputs[?OutputKey=='TargetGroupArn'].OutputValue" \
+            --output text \
+            --region $AWS_REGION)  
+
+          # Get outputs from ECS cluster stack
+
+           ClusterName=$(aws cloudformation describe-stacks \
+            --stack-name $ECS_CLUSTER_STACK \
+            --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue" \
+            --output text \
+            --region $AWS_REGION)  
+            
+          aws cloudformation create-stack \
+          --stack-name $ECS-Service-Stack\
+          --template-body file://infrastructure/ecs-service-private.yaml \
+          --parameters file://parameters.json \
+          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+          --region $AWS_REGION 
+
+          # 等待栈创建完成
+          echo "⏳ Waiting for stack creation..."
+          aws cloudformation wait stack-create-complete \
+            --stack-name $ECS-Service-Stack \
+            --region $AWS_REGION
+        
+          if [ $? -eq 0 ]; then
+            echo "✅ Infrastructure $ECS-Service-Stack deployed successfully!"
+          else
+            echo "❌ Stack creation failed. Checking events..."  
+            aws cloudformation describe-stack-events \
+              --stack-name $ECS-Service-Stack\
+              --region $AWS_REGION \
+              --query "StackEvents[?ResourceStatus=='CREATE_FAILED']" \
+              --output table
+           exit 1
+         fi
     
-#     - name: Get CloudFormation outputs
-#       id: cf-outputs
-#       run: |
-#         ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
-#         STACK_NAME="servicenow-$ENVIRONMENT"
+    - name: Get CloudFormation outputs
+      if: steps.check_ecs_service.outputs.ECSService_exists == 'true'
+      run: |
+      
+        echo "📋 Getting CloudFormation outputs..."
         
-#         echo "📋 Getting CloudFormation outputs..."
+        # 获取栈输出
+        OUTPUTS=$(aws cloudformation describe-stacks \
+          --stack-name $ECS-Service-Stack \
+          --query 'Stacks[0].Outputs' \
+          --region $AWS_REGION \
+          --output json)
         
-#         # 获取栈输出
-#         OUTPUTS=$(aws cloudformation describe-stacks \
-#           --stack-name $STACK_NAME \
-#           --query 'Stacks[0].Outputs' \
-#           --region ${{ env.AWS_REGION }} \
-#           --output json)
+        # 提取关键输出
+        CLUSTER_NAME=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ECSClusterName").OutputValue')
+        SERVICE_NAME=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ECSServiceName").OutputValue')
+
         
-#         # 提取关键输出
-#         CLUSTER_NAME=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ECSClusterName").OutputValue')
-#         SERVICE_NAME=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ECSServiceName").OutputValue')
-#         ALB_DNS=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey=="ALBDnsName").OutputValue')
+        echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
+        echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+
         
-#         echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
-#         echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-#         echo "ALB_DNS=$ALB_DNS" >> $GITHUB_ENV
-        
-#         echo "✅ Retrieved CloudFormation outputs:"
-#         echo "   Cluster: $CLUSTER_NAME"
-#         echo "   Service: $SERVICE_NAME"
-#         echo "   ALB DNS: $ALB_DNS"
+        echo "✅ Retrieved CloudFormation outputs:"
+        echo "   Cluster: $CLUSTER_NAME"
+        echo "   Service: $SERVICE_NAME"
+
     
-#     - name: Update ECS service with new image
-#       run: |
-#         ENVIRONMENT=${{ github.event.inputs.environment || github.ref_name == 'main' && 'staging' || 'production' }}
+    - name: Update ECS service with a new image if there is a new image in ECR
+      if: steps.check_ecs_service.outputs.ECSService_exists == 'true'
+      run: |
+
         
-#         echo "🔄 Updating ECS service with new image..."
+        echo "🔄 Updating ECS service with a new image..."
         
-#         # 方法1：直接更新服务（最简单）
-#         aws ecs update-service \
-#           --cluster ${{ env.CLUSTER_NAME }} \
-#           --service ${{ env.SERVICE_NAME }} \
-#           --force-new-deployment \
-#           --region ${{ env.AWS_REGION }}
+        aws ecs update-service \
+          --cluster ${{ env.CLUSTER_NAME }} \
+          --service ${{ env.SERVICE_NAME }} \
+          --force-new-deployment \
+          --region $AWS_REGION 
         
-#         echo "✅ ECS service update initiated"
+        echo "✅ ECS service update initiated"
         
-#         # 或者方法2：使用新任务定义（更精确控制）
-#         # 获取当前任务定义
-#         # TASK_DEF=$(aws ecs describe-task-definition \
-#         #   --task-definition servicenow-$ENVIRONMENT-task \
-#         #   --region ${{ env.AWS_REGION }} \
-#         #   --query 'taskDefinition' \
-#         #   --output json)
-#         #
-#         # 更新镜像并注册新任务定义
-#         # ... 然后更新服务使用新任务定义
     
-#     - name: Wait for deployment to stabilize
-#       run: |
-#         echo "⏳ Waiting for ECS deployment to stabilize..."
+    - name: Wait for deployment to stabilize
+      if: steps.check_ecs_service.outputs.ECSService_exists == 'true'
+      run: |
+        echo "⏳ Waiting for ECS deployment to stabilize..."
         
-#         # 等待服务稳定
-#         aws ecs wait services-stable \
-#           --cluster ${{ env.CLUSTER_NAME }} \
-#           --service ${{ env.SERVICE_NAME }} \
-#           --region ${{ env.AWS_REGION }}
+        # 等待服务稳定
+        aws ecs wait services-stable \
+          --cluster ${{ env.CLUSTER_NAME }} \
+          --service ${{ env.SERVICE_NAME }} \
+          --region $AWS_REGION 
         
-#         echo "✅ ECS service stabilized"
+        echo "✅ ECS service stabilized"
         
-#         # 获取部署状态
-#         SERVICE_INFO=$(aws ecs describe-services \
-#           --cluster ${{ env.CLUSTER_NAME }} \
-#           --services ${{ env.SERVICE_NAME }} \
-#           --region ${{ env.AWS_REGION }} \
-#           --query 'services[0]')
+        # 获取部署状态
+        SERVICE_INFO=$(aws ecs describe-services \
+          --cluster ${{ env.CLUSTER_NAME }} \
+          --services ${{ env.SERVICE_NAME }} \
+          --region ${{ env.AWS_REGION }} \
+          --query 'services[0]')
         
-#         DESIRED_COUNT=$(echo $SERVICE_INFO | jq -r '.desiredCount')
-#         RUNNING_COUNT=$(echo $SERVICE_INFO | jq -r '.runningCount')
-#         DEPLOYMENTS=$(echo $SERVICE_INFO | jq -r '.deployments | length')
+        DESIRED_COUNT=$(echo $SERVICE_INFO | jq -r '.desiredCount')
+        RUNNING_COUNT=$(echo $SERVICE_INFO | jq -r '.runningCount')
+        DEPLOYMENTS=$(echo $SERVICE_INFO | jq -r '.deployments | length')
         
-#         echo "📊 Deployment Status:"
-#         echo "   Desired tasks: $DESIRED_COUNT"
-#         echo "   Running tasks: $RUNNING_COUNT"
-#         echo "   Active deployments: $DEPLOYMENTS"
+        echo "📊 Deployment Status:"
+        echo "   Desired tasks: $DESIRED_COUNT"
+        echo "   Running tasks: $RUNNING_COUNT"
+        echo "   Active deployments: $DEPLOYMENTS"
 
 #   # 5. 验证部署
 #   verify-deployment:

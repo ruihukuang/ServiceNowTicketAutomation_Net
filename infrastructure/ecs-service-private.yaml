@@ -188,3 +188,7 @@ Outputs:
   ECSExecutionRoleArn:
     Description: 'ECS Execution Role ARN'
     Value: !GetAtt ECSExecutionRole.Arn
+
+  ClusterName:
+    Description: 'ECS Cluster Name'
+    Value: !Ref ClusterName
