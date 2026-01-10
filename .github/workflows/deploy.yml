@@ -583,7 +583,7 @@ jobs:
           aws cloudformation create-stack \
           --stack-name $ECS_SERVICE_STACK\
           --template-body file://infrastructure/ecs-service-private.yaml \
-          --parameters file://parameters.json \
+          --parameters file://parameters_ECSService.json\
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --region $AWS_REGION 
 
