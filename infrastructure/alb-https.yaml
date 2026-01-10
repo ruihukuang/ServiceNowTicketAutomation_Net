@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'ALB with cross-account Route53 DNS automation'
+Description: 'ALB with cross-account Route53 DNS automation - FIXED'
 
 Parameters:
   EnvironmentName:
@@ -103,7 +103,7 @@ Resources:
         - Key: Environment
           Value: !Ref EnvironmentName
 
-  # 2. IAM Role for Lambda
+  # 2. IAM Role for Lambda - FIXED
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -133,7 +133,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${EnvironmentName}-CreateDNSRecord:*      
+                  - logs:DescribeLogGroups
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${EnvironmentName}-CreateDNSRecord:*
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
@@ -182,6 +183,14 @@ Resources:
           
           def create_dns_record(route53_client, hosted_zone_id, domain_name, alb_dns_name, alb_hosted_zone_id):
               """Create or update Route53 alias record"""
+              # Ensure domain name ends with a dot
+              if not domain_name.endswith('.'):
+                  domain_name = domain_name + '.'
+              
+              # Ensure ALB DNS name ends with a dot
+              if not alb_dns_name.endswith('.'):
+                  alb_dns_name = alb_dns_name + '.'
+              
               change_batch = {
                   'Changes': [{
                       'Action': 'UPSERT',
@@ -210,6 +219,14 @@ Resources:
           
           def delete_dns_record(route53_client, hosted_zone_id, domain_name, alb_dns_name, alb_hosted_zone_id):
               """Delete Route53 alias record"""
+              # Ensure domain name ends with a dot
+              if not domain_name.endswith('.'):
+                  domain_name = domain_name + '.'
+              
+              # Ensure ALB DNS name ends with a dot
+              if not alb_dns_name.endswith('.'):
+                  alb_dns_name = alb_dns_name + '.'
+              
               change_batch = {
                   'Changes': [{
                       'Action': 'DELETE',
@@ -248,6 +265,8 @@ Resources:
           
           def lambda_handler(event, context):
               logger.info(f"Received event: {json.dumps(event)}")
+              
+              response_data = {}
               
               try:
                   properties = event.get('ResourceProperties', {})
@@ -307,17 +326,29 @@ Resources:
                   
               except Exception as e:
                   logger.error(f"Error in Lambda function: {str(e)}")
-                  error_data = {
+                  response_data = {
                       'Error': str(e)
                   }
-                  cfnresponse.send(event, context, cfnresponse.FAILED, error_data)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, response_data)
 
-  # 4. Custom Resource for DNS Management
+  # 4. Lambda Function Permissions for Custom Resource - FIXED
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: CreateDNSRecordFunction
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CreateDNSRecordFunction
+      Principal: cloudformation.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
+
+  # 5. Custom Resource for DNS Management
   CrossAccountDNSRecord:
     Type: Custom::CrossAccountDNS
     DependsOn: 
       - ApplicationLoadBalancer
       - CreateDNSRecordFunction
+      - LambdaPermission
     Properties:
       ServiceToken: !GetAtt CreateDNSRecordFunction.Arn
       CrossAccountRoleArn: !Ref CrossAccountRoute53RoleArn
@@ -325,15 +356,6 @@ Resources:
       DomainName: !Ref DomainNameCustom
       ALBHostedZoneId: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
       ALBDNSName: !GetAtt ApplicationLoadBalancer.DNSName
-
-  # 5. Lambda Function Permissions for Custom Resource
-  LambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref CreateDNSRecordFunction
-      Principal: cloudsformation.amazonaws.com
-      SourceAccount: !Ref AWS::AccountId
 
 Outputs:
   ALBDnsName:
