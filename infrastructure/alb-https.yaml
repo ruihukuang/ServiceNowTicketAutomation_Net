@@ -18,7 +18,7 @@ Parameters:
     Type: String
   HostedZoneId:
     Type: String
-    default: Z0668343T3C4U6RNZGN0
+    Default: Z0668343T3C4U6RNZGN0
   DomainNameCustom:
     Type: String
     Default: "v1.prod.servicenow123.io"
