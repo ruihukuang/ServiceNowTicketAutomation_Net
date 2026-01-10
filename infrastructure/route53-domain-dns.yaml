@@ -10,18 +10,18 @@ Parameters:
   FullDomainName:
     Type: String
     Default: "servicenow123.io"
+  VPCRegion:
+    Type:String
 
 Resources:
-  # 1. 私有托管区
   HostedZone:
     Type: AWS::Route53::HostedZone
     Properties:
       Name: !Ref FullDomainName
       VPCs:
         - VPCId: !Ref VpcId
-          VPCRegion: !Ref "AWS::Region"
+          VPCRegion: !Ref VPCRegion
 
-  # 2. ACM 证书
   SSLCertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:

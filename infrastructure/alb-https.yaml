@@ -50,6 +50,17 @@ Resources:
       HealthCheckPath: /
       Matcher:
         HttpCode: 200
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: !Ref ContainerPort
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
 
   HTTPSListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -70,6 +81,8 @@ Resources:
     Properties:
       HostedZoneId: !Ref HostedZoneId
       Name: !Ref DomainNameCustom
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainNameCustom
       Type: A
       AliasTarget:
         DNSName: !GetAtt ApplicationLoadBalancer.DNSName
@@ -81,7 +94,8 @@ Outputs:
     Value: !GetAtt ApplicationLoadBalancer.DNSName
   ALBFinalEndpoint:
     Description: 'Final HTTPS endpoint for users'
-    Value: !Sub https://${FullDomainName}
+    Value: !Sub https://${DomainNameCustom}
+    Value: !Sub https://${DomainNameCustom}
   TargetGroupArn:
     Description: 'Target Group ARN'
     Value: !Ref TargetGroup
