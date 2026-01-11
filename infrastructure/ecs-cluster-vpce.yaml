@@ -151,27 +151,26 @@ Resources:
           Value: !Sub ${EnvironmentName}-ssm-endpoint
 
 
-VPCEndpointSecurityGroup: #VPC端点安全组需要允许来自ECS安全组的入站流量。如果使用同一个安全组（ECSSecurityGroupId），会出现循环依赖和连接问题。
-  Type: AWS::EC2::SecurityGroup
-  Properties:
-    GroupDescription: Security group for VPC endpoints
-    VpcId: !Ref VpcId
-    SecurityGroupIngress:
-      # 允许来自ECS安全组的HTTPS流量
-      # 用于: ECR API, ECR DKR, CloudWatch Logs, 
-      #       Secrets Manager, STS, SSM, KMS
-      - Description: From ECS to VPC endpoints
-        IpProtocol: tcp
-        FromPort: 443
-        ToPort: 443
-        SourceSecurityGroupId: !Ref ECSSecurityGroupId
-      
+  VPCEndpointSecurityGroup: #VPC端点安全组需要允许来自ECS安全组的入站流量。如果使用同一个安全组（ECSSecurityGroupId），会出现循环依赖和连接问题。
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC endpoints
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: From ECS to VPC endpoints
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref ECSSecurityGroupId       # 允许来自ECS安全组的HTTPS流量 # 用于: ECR API, ECR DKR, CloudWatch Logs,  Secrets Manager, STS, SSM, KMS
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-vpcendpoint-sg
       # 2. S3网关端点不需要这里配置！
       # S3是网关端点，通过路由表和端点策略控制
       # 不需要安全组规则
     
-    # VPC端点出站 - 通常不需要
-    SecurityGroupEgress: []
+      # VPC端点出站 - 通常不需要
 
 Outputs:
   ClusterName:
