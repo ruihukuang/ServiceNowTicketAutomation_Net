@@ -144,7 +144,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref EVPCEndpointSecurityGroup  # 修改为引用参数
+        - !Ref VPCEndpointSecurityGroup  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
