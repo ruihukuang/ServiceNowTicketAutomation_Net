@@ -26,7 +26,7 @@ Parameters:
     Default: 2
   Cpu:
     Type: String
-    Default: '512'
+    Default: '4096'
   Memory:
     Type: String
     Default: '4096'
