@@ -261,7 +261,7 @@ Outputs:
       - ${DnsName}
       - DnsName: !Select [0, !GetAtt ECREndpoint.DnsEntries]
   
-  CSEndpointId:
+  ECSEndpointId:
     Description: 'ECS API VPC Endpoint ID'
     Value: !Ref ECSEndpoint
   
