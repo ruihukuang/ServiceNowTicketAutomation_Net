@@ -196,6 +196,7 @@ Resources:
   # Auto Scaling
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: ECSService  # ← CRITICAL - wait for service to be created
     Properties:
       MaxCapacity: 4
       MinCapacity: !Ref DesiredCount
