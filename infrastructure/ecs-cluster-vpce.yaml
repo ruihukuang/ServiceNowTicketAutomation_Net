@@ -37,8 +37,9 @@ Resources:
           Value: private-vpce
 
   # VPC Endpoints (关键！ECS通过这些端点访问AWS服务) (Critical for Private Network Connectivity)
+  # STS, ECR API, ECR DKR, Secrets Manager, S3, CloudWatch, and SSM services are now accessible within your VPC through private network connections.
 
-  # 1. ECR API Endpoint (用于认证)
+  # 1. ECR API Endpoint (用于认证) Authentication and API calls to ECR
   ECREndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -53,7 +54,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ecr-api-endpoint
 
-  # 2. ECR DKR Endpoint (用于拉取镜像)
+  # 2. ECR DKR Endpoint (用于拉取镜像) Docker registry operations (image pulls) 
   ECRDkrEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -68,7 +69,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ecr-dkr-endpoint
 
-  # 3. S3 Gateway Endpoint (ECR镜像层存储在S3) (Image Layer Storage)
+  # 3. S3 Gateway Endpoint (ECR镜像层存储在S3) (Image Layer Storage) Access to S3 for ECR image layers
   S3Endpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -120,7 +121,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-secretsmanager-endpoint
 
-# 6. STS Endpoint (Highly Recommended for Fargate Task Credentials)
+# 6. STS Endpoint (Highly Recommended for Fargate Task Credentials) Security Token Service for IAM roles
   STSEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -135,7 +136,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-sts-endpoint
 
-  # 6. SSM Endpoint (可选，用于调试)
+  # 6. SSM Endpoint (可选，用于调试) Systems Manager for debugging
   SSMEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -161,6 +162,36 @@ Resources:
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
         - !Ref VPCEndpointSecurityGroup
+
+  # ECS Agent Endpoint (CRITICAL!)
+  ECSAgentEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecs-agent
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: !Ref PrivateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ecs-agent-endpoint
+
+  # ECS Telemetry Endpoint (Recommended)
+  ECSTelemetryEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecs-telemetry
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: !Ref PrivateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ecs-telemetry-endpoint
 
 
   VPCEndpointSecurityGroup: #VPC端点安全组需要允许来自ECS安全组的入站流量。如果使用同一个安全组（ECSSecurityGroupId），会出现循环依赖和连接问题。
@@ -230,4 +261,14 @@ Outputs:
       - ${DnsName}
       - DnsName: !Select [0, !GetAtt ECREndpoint.DnsEntries]
   
-
+  CSEndpointId:
+    Description: 'ECS API VPC Endpoint ID'
+    Value: !Ref ECSEndpoint
+  
+  ECSAgentEndpointId:
+    Description: 'ECS Agent VPC Endpoint ID'
+    Value: !Ref ECSAgentEndpoint
+  
+  ECSTelemetryEndpointId:
+    Description: 'ECS Telemetry VPC Endpoint ID'
+    Value: !Ref ECSTelemetryEndpoint

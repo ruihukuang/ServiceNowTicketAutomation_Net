@@ -164,8 +164,8 @@ Resources:
           SourceSecurityGroupId: !Ref ALBSecurityGroup
       SecurityGroupEgress: #ECS需要连接到各种AWS服务，这些全部是出站（Egress）流量
         - Description: Allow all outbound traffic
-          IpProtocol: -1
-          CidrIp: 10.0.0.0/16 #出站规则（必须允许所有流量到VPC端点）
+          IpProtocol: -1 # All protocols
+          CidrIp: 0.0.0.0/0  # Allow to ANY IP  VPC endpoints. VPC Endpoints = AWS-managed ENIs with IPs like 10.x.x.x (but NOT in your VPC range)
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ecs-sg
