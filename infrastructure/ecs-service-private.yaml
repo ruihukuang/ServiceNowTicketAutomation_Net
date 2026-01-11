@@ -187,14 +187,6 @@ Resources:
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref TargetGroupArn
       HealthCheckGracePeriodSeconds: 180
-      ServiceConnectConfiguration:  # ADDED for better service mesh
-        Enabled: true
-        Namespace: !Sub ${EnvironmentName}-servicenow-namespace  # ADD THIS LINE
-        Services:
-          - PortName: servicenow-api-port
-            DiscoveryName: servicenow-api
-            ClientAliases:
-              - Port: !Ref ContainerPort
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
