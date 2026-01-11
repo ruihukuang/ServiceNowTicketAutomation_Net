@@ -164,7 +164,7 @@ jobs:
 
   # 2. 部署基础设施 VPC（第一次）
   deploy-infrastructure-vpc-stack:
-    #needs: build-push-to-ecr
+    needs: build-push-to-ecr
     runs-on: ubuntu-latest
 
     steps:
