@@ -150,6 +150,18 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ssm-endpoint
 
+  # Add this to your Cluster stack
+  ECSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: !Ref PrivateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
 
   VPCEndpointSecurityGroup: #VPC端点安全组需要允许来自ECS安全组的入站流量。如果使用同一个安全组（ECSSecurityGroupId），会出现循环依赖和连接问题。
     Type: AWS::EC2::SecurityGroup
