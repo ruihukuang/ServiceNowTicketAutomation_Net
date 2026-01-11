@@ -165,3 +165,13 @@ Outputs:
       !Ref SecretsManagerEndpoint,
       !Ref STSEndpoint # Added to Outputs
     ]]
+
+  ECREndpointDNS:
+    Description: 'ECR API Endpoint Private DNS'
+    Value: !GetAtt ECREndpoint.DnsEntries[0].DnsName
+  
+    ECREndpointIPs:
+    Description: 'ECR API Endpoint IPs'
+    Value: !Join [',', 
+      [!GetAtt ECREndpoint.NetworkInterfaceIds[0].PrimaryPrivateIpAddress]
+    ]

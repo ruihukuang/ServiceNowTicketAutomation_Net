@@ -162,7 +162,16 @@ Resources:
           FromPort: 8080
           ToPort: 8080
           SourceSecurityGroupId: !Ref ALBSecurityGroup
-      # No egress rules - all traffic goes through VPC Endpoints
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0  # Allows all outbound HTTPS (including to VPC endpoints) ECS security group needs OUTBOUND rules to allow HTTPS (443) to VPC endpoints
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: "Allow HTTP outbound (for health checks)"
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ecs-sg

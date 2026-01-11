@@ -46,6 +46,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess  # ADDED
       Policies:
         - PolicyName: ECRPullAccess
           PolicyDocument:
@@ -57,13 +58,24 @@ Resources:
                   - ecr:BatchCheckLayerAvailability
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
+                  - ecr:DescribeRepositories
+                  - ecr:ListImages
+                  - ecr:DescribeImages
+                Resource: '*'
+              - Effect: Allow
+                Action: sts:AssumeRole
                 Resource: '*'
               - Effect: Allow
                 Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:CreateLogGroup
+                  - logs:*
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - arn:aws:s3:::prod-ap-southeast-2-starport-layer-bucket/*  # ECR layers bucket
+                  - arn:aws:s3:::prod-ap-southeast-2-starport-layer-bucket
 
   # CloudWatch Log Group
   LogGroup:
@@ -74,6 +86,38 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
+  
+  # Network Diagnostic Task (Optional - for debugging)
+  NetworkTestTask:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${EnvironmentName}-network-test
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: network-test
+          Image: alpine/curl:latest
+          Command:
+            - sh
+            - -c
+            - |
+              echo "Testing connectivity..."
+              echo "Testing ECR API endpoint..."
+              nslookup api.ecr.ap-southeast-2.amazonaws.com
+              timeout 10 curl -v https://api.ecr.ap-southeast-2.amazonaws.com || echo "Failed"
+              echo "Testing STS endpoint..."
+              nslookup sts.ap-southeast-2.amazonaws.com
+              timeout 10 curl -v https://sts.ap-southeast-2.amazonaws.com || echo "Failed"
+              sleep 3600
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: network-test
 
   # Task Definition
   TaskDefinition:
@@ -110,9 +154,9 @@ Resources:
               - CMD-SHELL
               - curl -f http://localhost:8080/health || exit 1
             Interval: 30
-            Timeout: 5
+            Timeout: 10
             Retries: 3
-            StartPeriod: 60
+            StartPeriod: 120
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
@@ -130,7 +174,7 @@ Resources:
       DesiredCount: !Ref DesiredCount
       DeploymentConfiguration:
         MaximumPercent: 200
-        MinimumHealthyPercent: 50
+        MinimumHealthyPercent: 100
       TaskDefinition: !Ref TaskDefinition
       NetworkConfiguration:
         AwsvpcConfiguration:
@@ -142,7 +186,14 @@ Resources:
         - ContainerName: servicenow-api
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref TargetGroupArn
-      HealthCheckGracePeriodSeconds: 90
+      HealthCheckGracePeriodSeconds: 180
+      ServiceConnectConfiguration:  # ADDED for better service mesh
+        Enabled: true
+        Services:
+          - PortName: servicenow-api-port
+            DiscoveryName: servicenow-api
+            ClientAliases:
+              - Port: !Ref ContainerPort
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
