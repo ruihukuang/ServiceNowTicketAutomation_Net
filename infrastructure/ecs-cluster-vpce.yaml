@@ -168,10 +168,8 @@ Outputs:
 
   ECREndpointDNS:
     Description: 'ECR API Endpoint Private DNS'
-    Value: !GetAtt ECREndpoint.DnsEntries[0].DnsName
+    Value: !Sub
+      - ${DnsName}
+      - DnsName: !Select [0, !GetAtt ECREndpoint.DnsEntries]
   
-    ECREndpointIPs:
-    Description: 'ECR API Endpoint IPs'
-    Value: !Join [',', 
-      [!GetAtt ECREndpoint.NetworkInterfaceIds[0].PrimaryPrivateIpAddress]
-    ]
+
