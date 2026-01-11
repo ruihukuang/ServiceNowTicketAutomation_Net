@@ -87,6 +87,12 @@ jobs:
         fi
       
         echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
+   
+    - name: Skip Build if Image Already Exists
+      if: env.image_exists == 'true'
+      run: |
+        echo "✅ Image with tag ${{ env.EXISTING_IMAGE_TAG }} already exists in ECR"
+        echo "Skipping build and push steps"
 
 
     - name: Build, tag, and push a docker image to Amazon ECR if an docker image does not exist
@@ -113,12 +119,6 @@ jobs:
           echo "✅ Image pushed successfully"
           echo "Image URI: ${{ env.FULL_IMAGE_NAME }}"
   
-    - name: Skip Build if Image Already Exists
-      if: env.image_exists == 'true'
-      run: |
-        echo "✅ Image with tag ${{ env.EXISTING_IMAGE_TAG }} already exists in ECR"
-        echo "Skipping build and push steps"
-
 
     - name: Verify ECR image
       if: env.image_exists == 'false' || env.image_exists == 'true'
