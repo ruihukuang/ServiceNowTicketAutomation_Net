@@ -29,7 +29,7 @@ Parameters:
     Default: '512'
   Memory:
     Type: String
-    Default: '1024'
+    Default: '4096'
 
 Resources:
   # ECS Task Execution Role
