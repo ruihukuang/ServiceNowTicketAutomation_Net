@@ -152,11 +152,11 @@ Resources:
           HealthCheck:
             Command:
               - CMD-SHELL
-              - curl -f http://localhost:8080/health || exit 1
+              - dotnet tool install -g dotnet-healthcheck && healthcheck http://localhost:8080/health || exit 1
             Interval: 30
             Timeout: 60
             Retries: 3
-            StartPeriod: 120
+            StartPeriod: 300
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
