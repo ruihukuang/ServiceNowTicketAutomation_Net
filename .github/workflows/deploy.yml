@@ -69,61 +69,49 @@ jobs:
            --repository-name ${{ env.ECR_REPOSITORY }} \
            --region ${{ env.AWS_REGION }}
     
-    - name: check if an docker image  exists and act accordingly
+    - name: Check for changes
+      id: check_changes
       run: |
-        # Check for images with specific tag pattern
-        IMAGE_TAG="${{ github.sha }}_servicenow"
-        FULL_IMAGE_NAME="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG"
-
-        # Check if image with this tag already exists
-        if aws ecr describe-images \
-          --repository-name ${{ env.ECR_REPOSITORY }} \
-          --image-ids imageTag=$IMAGE_TAG \
-          --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-          echo "image_exists=true" >> $GITHUB_ENV
-          echo "EXISTING_IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+        # Check if Dockerfile or source code changed
+        if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '(Dockerfile|\.cs|\.csproj|\.sln)'; then
+          echo "changes_detected=true" >> $GITHUB_ENV
         else
-          echo "image_exists=false" >> $GITHUB_ENV
+          echo "changes_detected=false" >> $GITHUB_ENV
         fi
       
         echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
    
     - name: Skip Build if Image Already Exists
-      if: env.image_exists == 'true'
+      if: env.changes_detected == 'false'
       run: |
-        echo "✅ Image with tag ${{ env.EXISTING_IMAGE_TAG }} already exists in ECR"
+        echo "✅ An image already exists in ECR"
         echo "Skipping build and push steps"
 
 
     - name: Build, tag, and push a docker image to Amazon ECR if an docker image does not exist
-      env:
-        IMAGE_TAG: ${{ github.sha }}_servicenow
-      if: env.image_exists == 'false'
+      if: env.changes_detected == 'true'
       run: |
-        # Build with multiple tags
+        # Build with a tag
         docker build \
-          -t ${{ env.FULL_IMAGE_NAME }} \
           -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest \
           .
         echo "✅ Docker image built and tagged"
       
     - name: Push Docker Image to Private ECR
-      if: env.image_exists == 'false'
+      if: env.changes_detected == 'true'
       run: |
-          # Push with SHA tag
-          docker push ${{ env.FULL_IMAGE_NAME }}
       
           # Push latest tag
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
       
           echo "✅ Image pushed successfully"
-          echo "Image URI: ${{ env.FULL_IMAGE_NAME }}"
+
   
 
     - name: Verify ECR image
-      if: env.image_exists == 'false' || env.image_exists == 'true'
+      if: env.changes_detected == 'true' #Only verify NEW images
       env:
-        IMAGE_TO_TEST: ${{ env.image_exists == 'true' && format('{0}/{1}:{2}', env.ECR_REGISTRY, env.ECR_REPOSITORY, env.EXISTING_IMAGE_TAG) || env.FULL_IMAGE_NAME }}
+        IMAGE_TO_TEST: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
       run: |
         echo "🔄 Logging into ECR..."
         aws ecr get-login-password --region ${{ env.AWS_REGION }} | \

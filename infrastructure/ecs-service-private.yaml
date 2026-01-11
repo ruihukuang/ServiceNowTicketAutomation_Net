@@ -199,7 +199,7 @@ Resources:
     Properties:
       MaxCapacity: 4
       MinCapacity: !Ref DesiredCount
-      ResourceId: !Sub service/${ClusterName}/${ECSService}
+      ResourceId:  !Sub service/${ClusterName}/${EnvironmentName}-servicenow-service
       ScalableDimension: ecs:service:DesiredCount
       ServiceNamespace: ecs
 
