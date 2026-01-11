@@ -43,11 +43,11 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VpcId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api  # CORRECT
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api  # ServiceName 参数指定要为哪个AWS服务创建VPC端点
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroupId  # 修改为引用参数
+        - !Ref VPCEndpointSecurityGroup # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -62,7 +62,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroupId  # 修改为引用参数
+        - !Ref VPCEndpointSecurityGroup # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -99,7 +99,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroupId  # 修改为引用参数
+        - !Ref VPCEndpointSecurityGroup # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -114,7 +114,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroupId  # 修改为引用参数
+        - !Ref VPCEndpointSecurityGroup  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -129,7 +129,7 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroupId
+        - !Ref VPCEndpointSecurityGroup
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
@@ -144,11 +144,35 @@ Resources:
       VpcEndpointType: Interface
       SubnetIds: !Ref PrivateSubnetIds
       SecurityGroupIds:
-        - !Ref ECSSecurityGroupId  # 修改为引用参数
+        - !Ref EVPCEndpointSecurityGroup  # 修改为引用参数
       PrivateDnsEnabled: true
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ssm-endpoint
+
+
+VPCEndpointSecurityGroup: #VPC端点安全组需要允许来自ECS安全组的入站流量。如果使用同一个安全组（ECSSecurityGroupId），会出现循环依赖和连接问题。
+  Type: AWS::EC2::SecurityGroup
+  Properties:
+    GroupDescription: Security group for VPC endpoints
+    VpcId: !Ref VpcId
+    SecurityGroupIngress:
+      # 允许来自ECS安全组的HTTPS流量
+      - Description: From ECS to VPC endpoints
+        IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        SourceSecurityGroupId: !Ref ECSSecurityGroupId
+      
+      # S3端点使用HTTP
+      - Description: From ECS to S3 endpoint (HTTP)
+        IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !Ref ECSSecurityGroupId
+    
+    # VPC端点出站 - 通常不需要
+    SecurityGroupEgress: []
 
 Outputs:
   ClusterName:

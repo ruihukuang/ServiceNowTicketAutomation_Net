@@ -162,16 +162,62 @@ Resources:
           FromPort: 8080
           ToPort: 8080
           SourceSecurityGroupId: !Ref ALBSecurityGroup
-      SecurityGroupEgress:
-        - IpProtocol: tcp
+      SecurityGroupEgress: #ECS需要连接到各种AWS服务，这些全部是出站（Egress）流量
+      # 1. ECR API 端点 (认证)
+        - Description: To ECR API endpoint (auth)
+          IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          CidrIp: 0.0.0.0/0  # Allows all outbound HTTPS (including to VPC endpoints) ECS security group needs OUTBOUND rules to allow HTTPS (443) to VPC endpoints
-        - IpProtocol: tcp
+          CidrIp: 10.0.0.0/16  # 指向VPC端点
+          # 或使用安全组引用 VPC端点安全组
+      
+      # 2. ECR DKR 端点 (拉取镜像)
+        - Description: To ECR DKR endpoint (pull images)
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+      
+      # 3. STS 端点 (Fargate任务凭证)
+        - Description: To STS endpoint (credentials)
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+      
+      # 4. CloudWatch Logs 端点
+        - Description: To CloudWatch Logs endpoint
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+      
+      # 5. Secrets Manager 端点
+        - Description: To Secrets Manager endpoint
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+      
+      # 6. SSM 端点 (可选，调试用)
+        - Description: To SSM endpoint (debugging)
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+      
+      # 7. S3 端点 (ECR镜像层)
+      # 注意：S3是Gateway端点，使用HTTP端口
+        - Description: To S3 endpoint (ECR image layers)
+          IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
-          Description: "Allow HTTP outbound (for health checks)"
+          CidrIp: 10.0.0.0/16
+
+        - Description: Allow all outbound traffic
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0 出站规则（必须允许所有流量到VPC端点）
+
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ecs-sg
