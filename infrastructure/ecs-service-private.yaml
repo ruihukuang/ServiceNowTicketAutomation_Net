@@ -156,7 +156,7 @@ Resources:
             Interval: 30
             Timeout: 60
             Retries: 3
-            StartPeriod: 300
+            StartPeriod: 300 #StartPeriod is the grace period before health checks start.
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
