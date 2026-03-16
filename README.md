@@ -32,6 +32,9 @@ Locally run docker container for Ollama. An Ollama object Hermes-3-Llama-3.1-8B.
 
 ![Alt text](/app_pics/local_run_ollama_container.png)
 
-Trigger an API request to a local Ollama Docker container to perform automated failure analysis on ServiceNow database records. The screenshot captures the output of the Ollama model to identify specific platform failure.
+Trigger an API request to a local Ollama Docker container to perform automated failure analysis on ServiceNow database records. The screenshots capture the output of the Ollama model to identify specific platform failure. The broken system is Jupyterhub in this case. 
 
 ![Alt text](/app_pics/API_call_to_local_run_Ollama_process_data.png)
+
+
+![Alt text](/app_pics/API_Ollama_System.png)
