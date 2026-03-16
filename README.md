@@ -17,7 +17,4 @@ Design
 <img width="1295" height="719" alt="image" src="https://github.com/user-attachments/assets/f55fc5b9-09f6-4bbb-8fa1-76c240a1f2ff" />
 
 
-Local Test:
-
-Healthy in .Net APP. 
 
