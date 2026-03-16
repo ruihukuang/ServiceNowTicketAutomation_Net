@@ -28,10 +28,10 @@ API call to query data from database
 
 ![Alt text](/app_pics/API_call_query_data_from_DB.png)
 
-Locally run docker container for Ollama. Ollama object Hermes-3-Llama-3.1-8B.Q4_K_M.gguf is downloaded from Hugging face 
+Locally run docker container for Ollama. An Ollama object Hermes-3-Llama-3.1-8B.Q4_K_M.gguf is downloaded from Hugging face 
 
 ![Alt text](/app_pics/local_run_ollama_container.png)
 
-API call to send data to locally run docker container Ollama to process data to identify what system/platform is broken bassed on ServiceNow Data
+Trigger an API request to a local Ollama Docker container to perform automated failure analysis on ServiceNow database records. The screenshot captures the output of the Ollama model to identify specific platform failure.
 
 ![Alt text](/app_pics/API_call_to_local_run_Ollama_process_data.png)
