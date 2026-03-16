@@ -32,6 +32,6 @@ Locally run docker container for Ollama. Ollama object Hermes-3-Llama-3.1-8B.Q4_
 
 ![Alt text](/app_pics/local_run_ollama_container.png)
 
-API call to send data to locally run docker container Ollam to process data to identify what system/platform is broken bassed on ServiceNow Data
+API call to send data to locally run docker container Ollama to process data to identify what system/platform is broken bassed on ServiceNow Data
 
 ![Alt text](/app_pics/API_call_to_local_run_Ollama_process_data.png)
