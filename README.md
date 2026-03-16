@@ -25,3 +25,7 @@ Check Health of the app:
 
 
 ![Alt text](/app_pics/healthy_app.png)
+
+API call to query data from database 
+
+![Alt text](/app_pics/API_call_query _data_from_DB.png)
