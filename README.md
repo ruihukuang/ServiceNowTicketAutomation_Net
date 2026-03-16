@@ -28,4 +28,4 @@ Check Health of the app:
 
 API call to query data from database 
 
-![Alt text](/app_pics/API_call_query _data_from_DB.png)
+![Alt text](/app_pics/API_call_query_data_from_DB.png)
