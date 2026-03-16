@@ -22,5 +22,6 @@ Local Test:
 
 Check Health of the app: 
 
-./app_pics/healthy_app.png
 
+
+![Alt text](/app_pics/healthy_app.png)
