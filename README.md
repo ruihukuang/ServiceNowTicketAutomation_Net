@@ -14,7 +14,8 @@ The front end link is https://github.com/ruihukuang/ServiceNowTicketAutomation_R
 
 Architecture Diagram  
 
-<img width="1213" height="718" alt="image" src="https://github.com/user-attachments/assets/ecf82dec-d482-4772-8f69-9922620120f7" />
+<img width="1230" height="719" alt="image" src="https://github.com/user-attachments/assets/898484ff-d025-4f9a-aa33-beb104433663" />
+
 
 Local Test Results:
 
