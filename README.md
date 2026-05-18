@@ -14,8 +14,7 @@ The front end link is https://github.com/ruihukuang/ServiceNowTicketAutomation_R
 
 Design  
 
-<img width="1295" height="719" alt="image" src="https://github.com/user-attachments/assets/f55fc5b9-09f6-4bbb-8fa1-76c240a1f2ff" />
-
+<img width="1024" height="566" alt="image" src="https://github.com/user-attachments/assets/193404c7-51fa-4742-8bd8-e0d9ae42b299" />
 
 
 Local Test Results:
