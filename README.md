@@ -12,10 +12,9 @@ Fake data are created for this project but they are based on actual cases in ind
 
 The front end link is https://github.com/ruihukuang/ServiceNowTicketAutomation_React.
 
-Design  
+Architecture Diagram  
 
-<img width="1024" height="566" alt="image" src="https://github.com/user-attachments/assets/193404c7-51fa-4742-8bd8-e0d9ae42b299" />
-
+<img width="1213" height="718" alt="image" src="https://github.com/user-attachments/assets/ecf82dec-d482-4772-8f69-9922620120f7" />
 
 Local Test Results:
 
